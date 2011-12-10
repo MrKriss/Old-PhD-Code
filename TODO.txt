@@ -1,0 +1,16 @@
+TODO List
+
+Finish Frahst Class
+-impliment all useed methods
+-impliment input check and function branching methods
+-test  
+
+Write synthetic data genration function
+-Short Anomalies 
+-- Step/Drop
+-- spike/dip
+-Persistent Anomalies
+-- Step changes
+-- Period shift  
+
+Write Batch Experiment Script 
