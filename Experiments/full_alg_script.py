@@ -679,10 +679,15 @@ def anomaly_AR_forcasting(st, p):
     h_window is ht_AR_win x numStreams 
     """
 
+    # initialise variables that are not yet present 
+    if not st.has_key('t_stat'):
+        st['t_stat'] = 0
+        st['pred_dsn'] = 0
+        st['x_sample'] = 0    
+
+
     # Build/Slide h_window
     if  st.has_key('h_window'):
-        #dropped_data_vec = st['h_window'][:,0].copy()
-        #new_data_vec = st['ht']
         st['h_window'][:-1,:] = st['h_window'][1:,:] # Shift Window
         st['h_window'][-1,:] = np.nan_to_num(st['ht'])
     else:
@@ -710,9 +715,29 @@ def anomaly_AR_forcasting(st, p):
         st['pred_zt'] = dot(st['Q'][:,:st['r']], pred_h).T
         
         '''Anomaly Test'''
-        if st['pred_err_norm'] > p['err_thresh']:
-            st['anomaly'] = True
-            
+        # Build/Slide pred_err_window
+        if  st.has_key('pred_err_win'):
+            st['pred_err_win'][:-1] = st['pred_err_win'][1:] # Shift Window
+            st['pred_err_win'][-1] = st['pred_err_norm']**2
+            #st['pred_err_win'][-1] = st['pred_err_norm']
+        else:
+            st['pred_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']), st['pred_err_norm'].size))
+            st['pred_err_win'][-1] = st['pred_err_norm']**2
+            #st['pred_err_win'][-1] = st['pred_err_norm']
+        
+        if st['t'] >=  (p['sample_N'] + p['dependency_lag']) : 
+            # Differenced squared norms of the residules. 
+            #st['pred_diff_sq_norm'] = st['pred_err_win'][::2] - st['pred_err_win'][1::2] 
+            #st['pred_diff_sq_norm'] = np.diff(st['pred_err_win'], axis = 0)[::2]
+            st['pred_diff_sq_norm'] = np.diff(st['pred_err_win'], axis = 0)
+            st['pred_dsn'] = st['pred_diff_sq_norm'][-1]
+                
+            st['x_sample'] = (st['pred_diff_sq_norm'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
+            st['t_stat'] = st['pred_diff_sq_norm'][-1] / np.sqrt(st['x_sample']/ p['sample_N'])
+        
+            if np.abs(st['t_stat']) > p['x_thresh']:
+                st['anomaly'] = True
+    
     return st
 
 def anomaly_AR_Qstat(st, p):
@@ -841,7 +866,7 @@ def anomaly_recon_stats(st, p, zt):
         st['recon_err_win'][-1] = st['recon_err_norm']**2
         #st['recon_err_win'][-1] = st['recon_err_norm']
     else:
-        st['recon_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']) *2, st['recon_err_norm'].size))
+        st['recon_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']), st['recon_err_norm'].size))
         st['recon_err_win'][-1] = st['recon_err_norm']**2
         #st['recon_err_win'][-1] = st['recon_err_norm']
     
@@ -851,7 +876,7 @@ def anomaly_recon_stats(st, p, zt):
         #st['rec_diff_sq_norm'] = np.diff(st['recon_err_win'], axis = 0)[::2]
         st['rec_diff_sq_norm'] = np.diff(st['recon_err_win'], axis = 0)
         st['rec_dsn'] = st['rec_diff_sq_norm'][-1]
-        if True : #not st['t'] % p['sample_N']: # if no remainder calc T_stat
+        if True : 
             
             st['x_sample'] = (st['rec_diff_sq_norm'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
             st['t_stat'] = st['rec_diff_sq_norm'][-1] / np.sqrt(st['x_sample']/ p['sample_N']) 
@@ -877,10 +902,10 @@ if __name__=='__main__':
               'AR_order' : 1,
               'err_thresh' : 1.5, 
               # Statistical 
-              'sample_N' : 50,
+              'sample_N' : 20,
               'dependency_lag' : 1,
               'x_thresh' : 10,
-              'FP_rate' : 10**-6,
+              'FP_rate' : 10**-4,
               # Q statistical 
               'Q_lag' : 5,
               'Q_alpha' : 0.05,
@@ -920,9 +945,9 @@ if __name__=='__main__':
 
         '''Anomaly Detection method''' 
         #st = anomaly_EWMA(st, p)
-        #st = anomaly_AR_forcasting(st, p)
+        st = anomaly_AR_forcasting(st, p)
         st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
-        st = anomaly_recon_stats(st, p, zt)
+        #st = anomaly_recon_stats(st, p, zt)
         #st = anomaly_AR_Qstat(st,p)
         
         '''Rank adaptation method''' 
@@ -931,8 +956,8 @@ if __name__=='__main__':
             st = rank_adjust_eigen(st, zt)
   
         '''Store data''' 
-        #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave']   
-        tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
+        tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn']   
+        #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
         #tracked_values = ['ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
         
         if 'res' not in locals(): 
@@ -957,6 +982,8 @@ if __name__=='__main__':
     res['hidden'] = res['ht']
     res['r_hist'] = res['r']
     pltSummary2(res, data, (p['F_min'] + p['epsilon'], p['F_min']))
+    
+    res['rec_dsn'] = res['pred_dsn'] # only needed to test prediction error t stat method 
     
     plot_4x1(data, res['ht'], res['rec_dsn'], res['t_stat'], ['']*4, ['']*4)
     plt.hlines(p['x_thresh'], 0, 1000)
