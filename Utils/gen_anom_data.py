@@ -10,9 +10,33 @@ import matplotlib.pyplot as plt
 import sys
 import os 
 
-"""
-Code Description:
-  .
+""" Code Description: The functions to generate synthetic data with various anomalies. 
+
+The baseline of the data itself is made up of a random combination of sine waves specified
+by the periods p1,...,pk. Thus each time series will have at most k trends, but some may only
+contribute slightly. 
+
+The anomalies are of two main kinds, Transient and persistent, reflecting their duration.
+Transient Anomalies  : Peaks/dips - sharp short gradients up/down then back to baseline
+                     : Step up/step down - sudden step changes
+Persistent Anomalies : Peaks/dips
+                     : Step Changes
+                     : Phase Changes - trends of a k 
+                     
+Anomalies will be in a miminum of 1 stream in N 
+
+Parameters 
+
+N - total number of streams 
+k - total number of sine trends making up all streams to various extents
+
+L - Anomaly length
+M - Magnitude of Anomaly
+percent_Anom - percent of N streams that are anomalous  
+
+The start time is randomised each time 
+
+
 """
 
 def gen_anom_peak()

@@ -62,7 +62,7 @@ def initialise(p, numStreams):
     if p.has_key('e_low'):
         store['lastChangeAt'] = 0.0
     if p.has_key('AR_order'):
-        store['pred_zt'] = 0.0
+        store['pred_zt'] = np.zeros(numStreams)
         store['pred_err'] = np.zeros(numStreams)
         store['pred_err_norm'] = 0.0
         store['pred_err_ave'] = 0.0
@@ -721,7 +721,7 @@ def anomaly_AR_forcasting(st, p):
             st['pred_err_win'][-1] = st['pred_err_norm']**2
             #st['pred_err_win'][-1] = st['pred_err_norm']
         else:
-            st['pred_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']), st['pred_err_norm'].size))
+            st['pred_err_win'] = np.zeros(p['sample_N'] + p['dependency_lag'])
             st['pred_err_win'][-1] = st['pred_err_norm']**2
             #st['pred_err_win'][-1] = st['pred_err_norm']
         
@@ -866,7 +866,7 @@ def anomaly_recon_stats(st, p, zt):
         st['recon_err_win'][-1] = st['recon_err_norm']**2
         #st['recon_err_win'][-1] = st['recon_err_norm']
     else:
-        st['recon_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']), st['recon_err_norm'].size))
+        st['recon_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']), 1))
         st['recon_err_win'][-1] = st['recon_err_norm']**2
         #st['recon_err_win'][-1] = st['recon_err_norm']
     
@@ -924,8 +924,8 @@ if __name__=='__main__':
     p['x_thresh'] = sp.stats.t.isf(0.5* p['FP_rate'], p['sample_N'])
 
     ''' Load Data '''
-    data = load_ts_data('isp_routers', 'full')
-    #data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2)
+    #data = load_ts_data('isp_routers', 'full')
+    data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2)
     data = zscore(data)
     z_iter = iter(data)
     numStreams = data.shape[1]
@@ -956,7 +956,7 @@ if __name__=='__main__':
             st = rank_adjust_eigen(st, zt)
   
         '''Store data''' 
-        tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn']   
+        tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
         #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
         #tracked_values = ['ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
         
@@ -977,7 +977,6 @@ if __name__=='__main__':
         # increment time        
         st['t'] += 1
         
-        
     res['Alg'] = 'My FRAHST'
     res['hidden'] = res['ht']
     res['r_hist'] = res['r']
@@ -990,41 +989,41 @@ if __name__=='__main__':
     plt.hlines(-p['x_thresh'], 0, 1000)
     plt.ylim(-p['x_thresh']-5, p['x_thresh']+5)
     
-    N = 20 
+    #N = 20 
     
-    a = res['recon_err_norm']**2
-    b = np.zeros_like(a)
+    #a = res['recon_err_norm']**2
+    #b = np.zeros_like(a)
 
-    for i in range(1,len(a)):
-        b[i] = a[i] - a[i-1]
+    #for i in range(1,len(a)):
+        #b[i] = a[i] - a[i-1]
 
-    c = np.atleast_1d(b[::2])
+    #c = np.atleast_1d(b[::2])
 
-    means = [0.0]*(len(c)/N)
-    stds = [0.0]*(len(c)/N)
+    #means = [0.0]*(len(c)/N)
+    #stds = [0.0]*(len(c)/N)
 
-    for i in range((len(c)/N)):
-        means[i] = c[N*i:N*(i+1)].mean()
-        stds[i] = c[N*i:N*(i+1)].std()
+    #for i in range((len(c)/N)):
+        #means[i] = c[N*i:N*(i+1)].mean()
+        #stds[i] = c[N*i:N*(i+1)].std()
 
-    T_stat = [0]*(len(c)/N)
-    for i in range((len(c)/N)):
-        T_stat[i] = means[i] / (stds[i] / sqrt(N)) 
+    #T_stat = [0]*(len(c)/N)
+    #for i in range((len(c)/N)):
+        #T_stat[i] = means[i] / (stds[i] / sqrt(N)) 
     
     
-    # ok so b == diff(x)
-    # c = diff(x)[::2]
+    ## ok so b == diff(x)
+    ## c = diff(x)[::2]
     
-    # What didi I do differently here?
-# hmm, I think igot the x_sample wrong     
+    ## What didi I do differently here?
+## hmm, I think igot the x_sample wrong     
     
-    D = 20 
-    T_stat2 = [0]*(len(c)-(2*D))
-    for i in range(len(c)-(2*D)):
-        T_stat2[i] = c[i] / np.sqrt((c[i+D : i+(2*D)]**2).sum()/ D)
+    #D = 20 
+    #T_stat2 = [0]*(len(c)-(2*D))
+    #for i in range(len(c)-(2*D)):
+        #T_stat2[i] = c[i] / np.sqrt((c[i+D : i+(2*D)]**2).sum()/ D)
     
-    T_stat3 = [0]*len(c)
-    for i in range(len(c)-(2*D)):
-        T_stat3[i+(2*D)] = c[i+(2*D)] / np.sqrt((c[i:i+D]**2).sum()/ D)
-    # actuall goes 
+    #T_stat3 = [0]*len(c)
+    #for i in range(len(c)-(2*D)):
+        #T_stat3[i+(2*D)] = c[i+(2*D)] / np.sqrt((c[i:i+D]**2).sum()/ D)
+    ## actuall goes 
     
