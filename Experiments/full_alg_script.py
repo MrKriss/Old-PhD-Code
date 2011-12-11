@@ -924,8 +924,8 @@ if __name__=='__main__':
     p['x_thresh'] = sp.stats.t.isf(0.5* p['FP_rate'], p['sample_N'])
 
     ''' Load Data '''
-    #data = load_ts_data('isp_routers', 'full')
-    data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2)
+    data = load_ts_data('isp_routers', 'full')
+    #data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2, seed = 1)
     data = zscore(data)
     z_iter = iter(data)
     numStreams = data.shape[1]
@@ -945,9 +945,9 @@ if __name__=='__main__':
 
         '''Anomaly Detection method''' 
         #st = anomaly_EWMA(st, p)
-        st = anomaly_AR_forcasting(st, p)
+        #st = anomaly_AR_forcasting(st, p)
         st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
-        #st = anomaly_recon_stats(st, p, zt)
+        st = anomaly_recon_stats(st, p, zt)
         #st = anomaly_AR_Qstat(st,p)
         
         '''Rank adaptation method''' 
@@ -956,8 +956,8 @@ if __name__=='__main__':
             st = rank_adjust_eigen(st, zt)
   
         '''Store data''' 
-        tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
-        #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
+        #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
+        tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
         #tracked_values = ['ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
         
         if 'res' not in locals(): 
@@ -982,7 +982,7 @@ if __name__=='__main__':
     res['r_hist'] = res['r']
     pltSummary2(res, data, (p['F_min'] + p['epsilon'], p['F_min']))
     
-    res['rec_dsn'] = res['pred_dsn'] # only needed to test prediction error t stat method 
+    #res['rec_dsn'] = res['pred_dsn'] # only needed to test prediction error t stat method 
     
     plot_4x1(data, res['ht'], res['rec_dsn'], res['t_stat'], ['']*4, ['']*4)
     plt.hlines(p['x_thresh'], 0, 1000)

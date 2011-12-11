@@ -24,7 +24,7 @@ Code Description:
   .
 """
 
-class FRAHST(version, p):
+class FRAHST():
   """ Class that holds all variants of FRAHST modules 
 
   version is a string specifying the combination of mudules to use 
@@ -37,7 +37,7 @@ class FRAHST(version, p):
 
   """
 
-  def __init__(self, version):
+  def __init__(self, version, p):
     self.p = p
     self.p['version'] = version
 
@@ -83,30 +83,38 @@ class FRAHST(version, p):
       self.st['eig_val'] = np.zeros(1)
     elif 'F-3' in version.split('.')[0]:        
       self.st['lastChangeAt'] = 0.0
+      
+    # Preliminary setup for forcasting methods.
+    # May put all initialisation checks here eventually
+    if 'for' in self.A_version: 
+        self.st['pred_zt'] = np.zeros(numStreams)
+        self.st['pred_err'] = np.zeros(numStreams)
+        self.st['pred_err_norm'] = 0.0
+        self.st['pred_err_ave'] = 0.0    
 
   def run(self, zt):
     if 'F-7' in self.F_version:
-      self.FRAHST_V7_0_iter(self,zt)
+      self.FRAHST_V7_0_iter(zt)
     elif 'F-3' in self.F_version:
-      self.FRAHST_V3_1_iter(self,zt)
+      self.FRAHST_V3_1_iter(zt)
 
   def rank_adjust(self, zt):
     # Check whether r is static 
     if Frahst_alg.p['static_r'] != 1:
       if 'R-eig' in self.R_version:
-        self.rank_adjust_eigen(self,zt)
+        self.rank_adjust_eigen(zt)
       elif 'R-eng' in self.R_version:
-        self.rank_adjust_energy(self,zt)
+        self.rank_adjust_energy(zt)
 
-  def detect_anom(self):
+  def detect_anom(self, zt):
     if 'A-forS' in self.A_version:
-      self.anomaly_AR_forcast_stat(self)
+      self.anomaly_AR_forcast_stat()
     elif 'A-forT' in self.A_version:
-      self.anomaly_AR_forcast_thresh(self)
+      self.anomaly_AR_forcast_thresh()
     elif 'A-recS' in self.A_version:
-      self.anomaly_recon_stat(self)
+      self.anomaly_recon_stat(zt)
     elif 'A-ewma' in self.A_version:
-      self.anomaly_EWMA(self)
+      self.anomaly_EWMA()
 
   def FRAHST_V3_1_iter(self, zt):
     ''' 
@@ -330,6 +338,7 @@ class FRAHST(version, p):
 
     self.st = st 
 
+  
   def FRAHST_V7_0_iter(self, zt):
     ''' 
     zt = data at next time step 
@@ -545,8 +554,6 @@ class FRAHST(version, p):
 
     self.st = st
 
-    # Define Rank adjustment Method
-    if 'Reng' in R_version:
   def rank_adjust_energy(self, zt):
     """ Adjust rank r of subspace accoring to Pedros Energy-adaptive method """
 
@@ -919,87 +926,114 @@ class FRAHST(version, p):
     self.st['t'] += 1    
     
  
-  def plot_res(var, xname = 'time steps', ynames = ['']*4, title = '', ylims = 0, hline= 1):
+  def plot_res(self, var, xname = 'time steps', ynames = None, title = None, hline= 1, anom = 1):
+    
+    if ynames is None:
+      ynames = ['']*4
+      
+    if title is None:
+      title = (self.p['version'])
     
     num_plots = len(var)
     
     for i, v in enumerate(var):
       if type(v) == str :
-        var[i] = getattr(self, res[v])
+        var[i] = getattr(self, 'res')[v]
     
     if num_plots == 1:
       plt.figure()
       plt.plot(self.res[var[0]])
+      if anom == 1:
+          for x in self.res['anomalies']:
+              plt.axvline(x, ymin=0.25, color='r')        
       
     elif num_plots == 2:
-      plt.figure()
-      plot_2x1(var[0], var[1], ylab = ynames[:2], xlab = xname, ylims = ylims)
+      plot_2x1(var[0], var[1], ynames[:2], xname)
+      
       if hline == 1:
-        plt.hlines(-(self.p['x_thresh']+5), 0, self.res['ht'].shape[0], 'k--')
-        plt.hlines(+(self.p['x_thresh']+5), 0, self.res['ht'].shape[0], 'k--')
-        plt.ylim(-20,20)
+        plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.hlines(+self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.ylim(-2*self.p['x_thresh'],2*self.p['x_thresh'])
+        
+      if anom == 1:
+        f = plt.gcf()
+        for ax in f.axes[:-1]:
+          for x in self.res['anomalies']:
+            ax.axvline(x, ymin=0.25, color='r')              
         
     elif num_plots == 3:
-      plt.figure()
-      plot_3x1(var[0], var[1], var[2], ylab = ynames[:3], 
-                                xlab = xname)      
+      plot_3x1(var[0], var[1], var[2], ynames[:3] , xname) 
+      
       if hline == 1:
-        plt.hlines(-(self.p['x_thresh']+5), 0, self.res['ht'].shape[0], 'k--')
-        plt.hlines(+(self.p['x_thresh']+5), 0, self.res['ht'].shape[0], 'k--') 
-        plt.ylim(-20,20)        
+        plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.hlines(+self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed') 
+        plt.ylim(-2*self.p['x_thresh'],2*self.p['x_thresh'])
+        
+      if anom == 1:
+        f = plt.gcf()
+        for ax in f.axes[:-1]:
+          for x in self.res['anomalies']:
+            ax.axvline(x, ymin=0.25, color='r')         
                
     elif num_plots == 4:
-      plt.figure()
-      plot_3x1(var[0], var[1], var[2], var[3], ylab = ynames[:4],
-                              xlab = xname)
+      plot_4x1(var[0], var[1], var[2], var[3], ynames[:4], xname)
+      
       if hline == 1:
-        plt.hlines(-(self.p['x_thresh']+5), 0, self.res['ht'].shape[0], 'k--')
-        plt.hlines(+(self.p['x_thresh']+5), 0, self.res['ht'].shape[0], 'k--')               
-        plt.ylim(-20,20)
+        plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.hlines(+self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')               
+        plt.ylim(-2*self.p['x_thresh'],2*self.p['x_thresh'])
+        
+      if anom == 1:
+        f = plt.gcf()
+        for ax in f.axes[:-1]:
+          for x in self.res['anomalies']:
+            ax.axvline(x, ymin=0.25, color='r')           
 
 if __name__=='__main__':
 
   ''' Experimental Run Parameters '''
   p = {'alpha': 0.98,
-       'init_r' : 5, 
-       # Pedro Anomal Detection
-       'holdOffTime' : 0,
-       # EWMA Anomaly detection
-       'EWMA_filter_alpha' : 0.2,
-       'residual_thresh' : 0.02,
-       # AR Anomaly detection 
-       'ht_AR_win' : 30,
-       'AR_order' : 1,
-       'err_thresh' : 1.5, 
-       # Statistical 
-       'recon_err_win_size': 100,
-       'x_thresh' : 10,
-       # Q statistical 
-       'Q_lag' : 5,
-       'Q_alpha' : 0.05,
-       # Eigen-Adaptive
-       'F_min' : 0.9,
-       'epsilon' : 0.05,
-       # Pedro Adaptive
-       'e_low' : 0.95,
-       'e_high' : 0.98,
-       'static_r' : 1,
-       'r_upper_bound' : None,
-       'fix_init_Q' : 0,
-       'small_value' : 0.0001,
-       'ignoreUp2' : 0 }
-  
+        'init_r' : 1, 
+        # Pedro Anomal Detection
+        'holdOffTime' : 0,
+        # EWMA Anomaly detection
+        'EWMA_filter_alpha' : 0.2,
+        'residual_thresh' : 0.02,
+        # AR Anomaly detection 
+        'ht_AR_win' : 30,
+        'AR_order' : 1,
+        'err_thresh' : 1.5, 
+        # Statistical 
+        'sample_N' : 20,
+        'dependency_lag' : 1,
+        'x_thresh' : 10,
+        'FP_rate' : 10**-4,
+        # Q statistical 
+        'Q_lag' : 5,
+        'Q_alpha' : 0.05,
+        # Eigen-Adaptive
+        'F_min' : 0.9,
+        'epsilon' : 0.05,
+        # Pedro Adaptive
+        'e_low' : 0.95,
+        'e_high' : 0.98,
+        'static_r' : 0,
+        'r_upper_bound' : None,
+        'fix_init_Q' : 0,
+        'small_value' : 0.0001,
+        'ignoreUp2' : 0 }
+      
   p['x_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
 
   ''' Load Data '''
-  #data = load_ts_data('isp_routers', 'full')
-  data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2)
+  data = load_ts_data('isp_routers', 'full')
+  #data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2, seed = 1)
   data = zscore(data)
   z_iter = iter(data)
   numStreams = data.shape[1]
 
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.R-eig.A-forS', p)
+  Frahst_alg = FRAHST('F-7.R-eig.A-recS', p)
 
   '''Begin Frahst'''
   # Main iterative loop. 
@@ -1013,21 +1047,24 @@ if __name__=='__main__':
     '''Frahst Version '''
     Frahst_alg.run(zt)
     # Calculate reconstructed data if needed
+    st = Frahst_alg.st
+    Frahst_alg.st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
 
     '''Anomaly Detection method''' 
-    Frahst_alg.detect_anom()
-    st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
+    Frahst_alg.detect_anom(zt)
 
     '''Rank adaptation method''' 
     Frahst_alg.rank_adjust(zt)
 
     '''Store data''' 
-    #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave']   
-    #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 't_mean', 'denom']
-    tracked_values = ['zt', 'ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
+    #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
+    tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
+    #tracked_values = ['ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
+        
 
     Frahst_alg.track_var(tracked_values)
 
-    ''' Plot Results '''
-    Frahst_alg.plot_res([data, 't_stat'])
+  ''' Plot Results '''
+  #Frahst_alg.plot_res([data, 'ht', 't_stat'])
+  Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
 

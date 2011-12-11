@@ -41,7 +41,7 @@ def adjust_ticks(ax, axis, num_ticks):
         ax.yaxis.set_major_locator(MaxNLocator(num_ticks))
     
 
-def plot_2x1(data1, data2, ylab, xlab, main_title = '', ylims = 0):
+def plot_2x1(data1, data2, ylab = '', xlab = '', main_title = '', ylims = 0):
     ''' Nice format to plot two subplotted time series'''
             
     # Plot data 
@@ -81,7 +81,7 @@ def plot_2x1(data1, data2, ylab, xlab, main_title = '', ylims = 0):
     fig.show()
 
     
-def plot_3x1(data1, data2, data3, ylab, xlab, main_title = ''):
+def plot_3x1(data1, data2, data3, ylab = '', xlab = '', main_title = ''):
             
     # Plot data 
     fig = plt.figure()
@@ -115,7 +115,6 @@ def plot_3x1(data1, data2, data3, ylab, xlab, main_title = ''):
     ax2.text(-0.09, 0.5, ylab[1], transform=ax2.transAxes, rotation=90,
                                      ha='right', va='center')        
     ax3.text(-0.09, 0.5, ylab[2], transform=ax3.transAxes, rotation=90,
-
                                      ha='right', va='center', multialignment = 'center')
     # Remove superflous ink 
     plt.setp(ax1.get_xticklabels(), visible = False)
@@ -123,8 +122,7 @@ def plot_3x1(data1, data2, data3, ylab, xlab, main_title = ''):
 
     fig.show()
     
-
-def plot_4x1(data1, data2, data3, data4, ylab, xlab, Title = '', ylims = 0):
+def plot_4x1(data1, data2, data3, data4, ylab = '', xlab = '', main_title = '', ylims = 0):
 
     # Plot data 
     fig = plt.figure()
@@ -165,39 +163,22 @@ def plot_4x1(data1, data2, data3, data4, ylab, xlab, Title = '', ylims = 0):
     
     ax1.set_xlim([0, data1.shape[0]])
                 
-    # Axis Labels
-    plt.suptitle(Title, size = 18, verticalalignment = 'top' )
+    # Labels
+    plt.suptitle( main_title, size = 18, verticalalignment = 'top' )
     
-    ylabx = -0.13
-    ax1.set_ylabel(ylab[0], horizontalalignment = 'center', transform = ax1.transAxes )
-    ax1.yaxis.set_label_coords(ylabx, 0.5)
-    ax2.set_ylabel(ylab[1], horizontalalignment = 'center')
-    ax2.yaxis.set_label_coords(ylabx, 0.5)
-    ax3.set_ylabel(ylab[2], multialignment='center', horizontalalignment = 'center')
-    ax3.yaxis.set_label_coords(ylabx, 0.5)           
-    ax4.set_ylabel(ylab[3], multialignment='center', horizontalalignment = 'center')
-    ax4.yaxis.set_label_coords(ylabx, 0.5)
+    ax4.set_xlabel(xlab)        
+    ax1.text(-0.09, 0.5, ylab[0], transform=ax1.transAxes, rotation=90,
+             ha='right', va='center')        
+    ax2.text(-0.09, 0.5, ylab[1], transform=ax2.transAxes, rotation=90,
+             ha='right', va='center')        
+    ax3.text(-0.09, 0.5, ylab[2], transform=ax3.transAxes, rotation=90,
+             ha='right', va='center', multialignment = 'center')    
+    ax4.text(-0.09, 0.5, ylab[3], transform=ax3.transAxes, rotation=90,
+             ha='right', va='center', multialignment = 'center')    
     
-    ax4.set_xlabel('Time Steps')        
-    
-    # Must draw canvas before editing text
-    fig.canvas.draw()
-    
-    # Represent Big numbers in 10^(x) format 
-    for ax in fig.axes :
-        fmat = ax.yaxis.major.formatter
-        if fmat.orderOfMagnitude >= fmat._powerlimits[1] \
-                    or fmat.orderOfMagnitude <= fmat._powerlimits[0] :
-                                
-            offset_text = str(ax.yaxis.offsetText._text) 
-            ax.yaxis.offsetText.set_visible(False)              
-            string = offset_text.split('e')        
-            ax.set_ylabel(ax.get_ylabel() + ' $(10^{%s})$' % string[1])
-        
     # Remove superflous ink 
     plt.setp(ax1.get_xticklabels(), visible = False)
     plt.setp(ax2.get_xticklabels(), visible = False)    
     plt.setp(ax3.get_xticklabels(), visible = False) 
     
     fig.show()    
-        
