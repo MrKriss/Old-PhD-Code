@@ -9,6 +9,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 import sys
 import os 
+from artSigs import sin_rand_combo
 
 """ Code Description: The functions to generate synthetic data with various anomalies. 
 
@@ -39,7 +40,30 @@ The start time is randomised each time
 
 """
 
-def gen_anom_peak()
+def gen_anom_peak(N, k):
+
+        # Code to make random sins combination 
+        A, sins = sin_rand_combo(N, T, periods, seed = None, noise_scale = 0.1)
+
+        # Code to make linear Anomalous trend 
+        l = 10
+        m = 10
+        baseLine = 0
+        amp = 5
+        period = 50 
+        
+        s0lin = Tseries(0)
+        interval_length = 300
+        
+        s0lin.makeSeries([1,3,4,1], [interval_length, l/2, l/2, 2 * interval_length - l], 
+                                [baseLine, baseLine, baseLine + m, baseLine], 
+                                gradient = float(m)/float(l/2), noise = 0.5)        
+        
+        # Now need to randomise start point within limits
+        
+        # write different function for each anomaly type 
+        
+
 
 #s1 = Tseries(0)
         s2 = Tseries(0)

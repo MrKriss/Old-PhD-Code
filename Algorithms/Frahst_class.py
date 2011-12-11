@@ -6,18 +6,18 @@
 
 import numpy as np
 from numpy import dot
+import scipy as sp
 from math import sqrt
 import numpy.linalg as npl
-import scipy as sp
 import matplotlib.pyplot as plt
-import sys
-import os 
-from load_data import load_data, load_ts_data
-from utils import QRsolveA, QRsolve_eigV, pltSummary2
+
+from plot_utils import plot_2x1, plot_3x1, plot_4x1
+from utils import QRsolveA, QRsolve_eigV
 from normalisationFunc import zscore
 from burg_AR import burg_AR
+
+from load_data import load_data, load_ts_data
 from artSigs import sin_rand_combo, simple_sins, simple_sins_3z
-from plot_utils import plot_2x1, plot_3x1, plot_4x1
 
 """
 Code Description:
