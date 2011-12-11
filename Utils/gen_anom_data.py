@@ -5,11 +5,13 @@
 # Created: 12/07/11
 
 import numpy as np
+import numpy.random as npr
 import scipy as sp
 import matplotlib.pyplot as plt
 import sys
 import os 
 from artSigs import sin_rand_combo
+from ControlCharts import Tseries
 
 """ Code Description: The functions to generate synthetic data with various anomalies. 
 
@@ -23,7 +25,7 @@ Transient Anomalies  : Peaks/dips - sharp short gradients up/down then back to b
 Persistent Anomalies : Peaks/dips
                      : Step Changes
                      : Phase Changes - trends of a k 
-                     
+
 Anomalies will be in a miminum of 1 stream in N 
 
 Parameters 
@@ -40,76 +42,57 @@ The start time is randomised each time
 
 """
 
-def gen_anom_peak(N, k):
+def gen_anom_peak(N, T, periods, L, M, pA, seed = None):
 
-        # Code to make random sins combination 
-        A, sins = sin_rand_combo(N, T, periods, seed = None, noise_scale = 0.1)
+  if seed is not None:
+    # Code to make random sins combination 
+    A, sins = sin_rand_combo(N, T, periods, seed = seed, noise_scale = 0.1)
+    npr.seed(seed)
+  else:
+    # Code to make random sins combination 
+    A, sins = sin_rand_combo(N, T, periods, noise_scale = 0.1)
 
-        # Code to make linear Anomalous trend 
-        l = 10
-        m = 10
-        baseLine = 0
-        amp = 5
-        period = 50 
-        
-        s0lin = Tseries(0)
-        interval_length = 300
-        
-        s0lin.makeSeries([1,3,4,1], [interval_length, l/2, l/2, 2 * interval_length - l], 
-                                [baseLine, baseLine, baseLine + m, baseLine], 
-                                gradient = float(m)/float(l/2), noise = 0.5)        
-        
-        # Now need to randomise start point within limits
-        
-        # write different function for each anomaly type 
-        
+  # Anomaly will occur (and finish) Between time points 50 and T - 10 
+  start_point = npr.randint(50, T - L - 10)
 
+  # Code to make linear Anomalous trend 
+  baseLine = 0
 
-#s1 = Tseries(0)
-        s2 = Tseries(0)
-        #s1.makeSeries([2,1,2], [300, 300, 300], noise = 0.5, period = 50, amp = 5)
-        #s2.makeSeries([2], [900], noise = 0.5, period = 50, amp = 5)
-        #data = sp.r_['1,2,0', s1, s2]
-        
-        s0lin = Tseries(0)
-        s0sin = Tseries(0)
-        s2lin = Tseries(0)
-        s2sin = Tseries(0)
-        s3 = Tseries(0)
-        s4 = Tseries(0)
-        
-        interval_length = 300
-        l = 10
-        m = 10
-        baseLine = 0
-        amp = 5
-        period = 50 
-        s0lin.makeSeries([1,3,4,1], [interval_length, l/2, l/2, 2 * interval_length - l], 
-                        [baseLine, baseLine, baseLine + m, baseLine], 
-                        gradient = float(m)/float(l/2), noise = 0.5)
-        s0sin.makeSeries([2], [3 * interval_length], [0.0], 
-                        amp = amp, period = period, noise = 0.5)
+  s0lin = Tseries(0)
+  s0lin.makeSeries([1,3,4,1], [start_point, L/2, L/2, T - start_point - L], 
+                   [baseLine, baseLine, baseLine + M, baseLine], 
+                   gradient = float(M)/float(L/2), noise_type ='none')      
 
-        # sum sin and linear components to get data stream                         
-        s1 = np.array(s0lin) + np.array(s0sin)   
+  # Select stream(s) to be anomalous
+  if type(pA) == int:
+    num_anom = pA
+  elif type(pA) < 1.0:
+    num_anom = np.floor(pA * N)
 
-        s2lin.makeSeries([1,4,3,1], [interval_length * 2, l/2, l/2, interval_length - l], 
-                        [baseLine, baseLine, baseLine - m, baseLine], 
-                        gradient = float(m)/float(l/2), noise = 0.5)
-        s2sin.makeSeries([2], [3 * interval_length], [0.0], 
-                        amp = amp, period = period, noise = 0.5)
-        s2 = np.array(s2lin) + np.array(s2sin)   
-        
-        s3.makeSeries([2], [3 * interval_length], [0.0], 
-                        amp = amp, period = period, noise = 0.5)
-        s4.makeSeries([2], [3 * interval_length], [0.0], 
-                        amp = amp, period = period, noise = 0.5)
+  if num_anom > 1:
+    anoms = []
+    num_left = N
+    num_needed = num_anom
+    for i in xrange(N):
+      # probability of selection = (number needed)/(number left)
+      p = num_needed / num_left
+      if npr.rand() <= p:
+        anoms.append(i) 
+        num_needed -= 1
+      else:
+        num_left -=1   
+  else:
+    anoms = npr.randint(N+1)
+  
+  A[:,anoms] = A[:,anoms] + s0lin
 
-        data = sp.r_['1,2,0', s1, s2, s3, s4]
+  output = dict(data = A, a_stream = anoms, a_start = start_point, a_L = L, a_M = M, 
+                trends = sins)
 
-
-
+  return output
 
 
 if __name__=='__main__':
+  
+  D = gen_anom_peak(50, 1000, [24,57,19,88], 10, 5,1)
   
