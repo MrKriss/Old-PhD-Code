@@ -37,13 +37,14 @@ class FRAHST():
 
   """
 
-  def __init__(self, version, p):
+  def __init__(self, version, p, numStreams):
     self.p = p
     self.p['version'] = version
 
     self.F_version = version.split('.')[0]
     self.R_version = version.split('.')[1]
     self.A_version = version.split('.')[2]
+    self.numStreams = numStreams
 
     """ Initialise all Frahst variables """
 
@@ -100,7 +101,7 @@ class FRAHST():
 
   def rank_adjust(self, zt):
     # Check whether r is static 
-    if Frahst_alg.p['static_r'] != 1:
+    if self.p['static_r'] != 1:
       if 'R-eig' in self.R_version:
         self.rank_adjust_eigen(zt)
       elif 'R-eng' in self.R_version:
@@ -218,7 +219,7 @@ class FRAHST():
 
     # Derived Variables 
     # Length of z or numStreams = N x L
-    numStreams = data.shape[1] 
+    numStreams = self.numStreams
     r = st['r']    
 
     # NOTE algorithm'st st Q, S, v and U are kept at max size (constant memory)
@@ -324,7 +325,7 @@ class FRAHST():
     # store eigen values
     #st['eig_val'] = e_values[:r]
     # Record hidden variables
-    ht_vec = np.hstack((ht.T[0,:], np.array([np.nan]*(numStreams-r))))
+    ht_vec = np.hstack((ht.T[0,:], np.array([np.nan]*(self.numStreams-r))))
     st['ht'] = ht_vec
 
     # Energy Ratio Calculations    
@@ -442,7 +443,7 @@ class FRAHST():
 
     # Derived Variables 
     # Length of z or numStreams = N x L
-    numStreams = data.shape[1] 
+    numStreams = self.numStreams
     r = st['r']
 
     # NOTE algorithm's s Q, S, v and U are kept at max size (constant memory)
@@ -540,7 +541,7 @@ class FRAHST():
     # Store eigen values
     st['eig_val'] = e_values[:r]
     # Record hidden variables
-    ht_vec = np.hstack((ht.T[0,:], np.array([np.nan]*(numStreams-r))))
+    ht_vec = np.hstack((ht.T[0,:], np.array([np.nan]*(self.numStreams-r))))
     st['ht'] = ht_vec
 
     # Energy Ratio Calculations    
@@ -618,6 +619,7 @@ class FRAHST():
     """ Adjust rank r of subspace accoring to my eigvalue-adaptive method """
 
     st = self.st
+    p = self.p
 
     Q = st['Q']
     S = st['S']
@@ -781,7 +783,7 @@ class FRAHST():
 
       # Calculate Prediction error based on last time step prediction  
       st['pred_err'] = np.abs(st['pred_zt'] - zt.T)
-      st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / numStreams
+      st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / self.numStreams
       st['pred_err_norm'] = npl.norm(st['pred_zt'] - zt.T)
 
       # Update prediction for next time step 
@@ -851,7 +853,7 @@ class FRAHST():
 
       # Calculate Prediction error based on last time step prediction  
       st['pred_err'] = np.abs(st['pred_zt'] - zt.T)
-      st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / numStreams
+      st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / self.numStreams
       st['pred_err_norm'] = npl.norm(st['pred_zt'] - zt.T)
 
       # Update prediction for next time step 
@@ -920,7 +922,7 @@ class FRAHST():
         self.res[k] = np.vstack((self.res[k], self.st[k]))
       if self.st['anomaly'] == True:
         print 'Found Anomaly at t = {0}'.format(self.st['t'])
-        self.res['anomalies'].append(st['t'])
+        self.res['anomalies'].append(self.st['t'])
         
     # Increment time        
     self.st['t'] += 1    
@@ -1033,7 +1035,7 @@ if __name__=='__main__':
   numStreams = data.shape[1]
 
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.R-eig.A-recS', p)
+  Frahst_alg = FRAHST('F-7.R-eig.A-recS', p, numStreams)
 
   '''Begin Frahst'''
   # Main iterative loop. 
