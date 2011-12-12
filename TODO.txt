@@ -1,16 +1,24 @@
 TODO List
 
-Finish Frahst Class
--impliment all useed methods
--impliment input check and function branching methods
--test  
-
 Write synthetic data genration function
--Short Anomalies 
--- Step/Drop
--- spike/dip
--Persistent Anomalies
--- Step changes
--- Period shift  
+x-Short Anomalies 
+x-- Step/Drop
+x-- spike/dip
+x-Persistent Anomalies
+x-- Step changes
+*- Period shift  
 
-Write Batch Experiment Script 
+
+[Work out which variants to test]
+
+Options:
+1) Fixed or dynamic R
+2) Anomaly statistic uses Forcasting Err or Compression Err
+3) compare with R change method. 
+
+[Work out which parameters to vary]
+
+Write analysis Script/method 
+
+Write Batch Experiment Script:
+ 

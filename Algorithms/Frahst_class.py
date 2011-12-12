@@ -944,10 +944,10 @@ class FRAHST():
     
     if num_plots == 1:
       plt.figure()
-      plt.plot(self.res[var[0]])
+      plt.plot(var[0])
       if anom == 1:
-          for x in self.res['anomalies']:
-              plt.axvline(x, ymin=0.25, color='r')        
+        for x in self.res['anomalies']:
+          plt.axvline(x, ymin=0.25, color='r')        
       
     elif num_plots == 2:
       plot_2x1(var[0], var[1], ynames[:2], xname)
