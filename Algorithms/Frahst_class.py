@@ -95,14 +95,15 @@ class FRAHST():
       self.st['pred_err'] = np.zeros(numStreams)
       self.st['pred_err_norm'] = 0
       self.st['pred_err_ave'] = 0  
-      self.st['t_stat'] = 0
       self.st['pred_dsn'] = 0
     if 'rec' in self.A_version:
       self.st['recon_err'] = np.zeros(numStreams)
       self.st['rec_err_norm'] = 0
-      self.st['t_stat'] = 0
       self.st['rec_dsn'] = 0
-      
+    if 'S' in self.A_version:
+      self.st['t_stat'] = 0
+    if 'eng' in self.A_version:
+      self.st['increased_r'] = bool(0)
 
   def run(self, zt):
     if 'F-7' in self.F_version:
@@ -131,6 +132,8 @@ class FRAHST():
       self.anomaly_recon_stat(zt)
     elif 'A-ewma' in self.A_version:
       self.anomaly_EWMA()
+    elif 'eng' in self.A_version:
+      self.anomaly_eng()
     else:
       print 'Did not run detect anomalies: Specified A-xxxx not recognised'
 
@@ -611,8 +614,8 @@ class FRAHST():
       U[:, r] = 0.0
       U[r, r] = 1.0 # change last element
 
-      # Flag as anomaly 
-      st['anomaly'] = bool(1)
+      # Flag as increased r 
+      st['increased_r'] = bool(1)
 
       st['lastChangeAt'] = t
 
@@ -675,6 +678,10 @@ class FRAHST():
       st['eig_val'] = np.hstack((st['eig_val'], z_bar_norm ** 2)) 
       # This is the bit where the estimate is off? dont really have anything better 
 
+      # Flag as increased r
+      if 'eng' in self.A_version:
+        st['increased_r'] = bool(1)
+
       # new r, increment and store
       st['r'] = r + 1
       st['Q'] = Q 
@@ -718,6 +725,14 @@ class FRAHST():
         st['r'] = r  
 
     self.st = st
+
+
+  def anomaly_eng(self):
+    
+    if self.st['increased_r'] == True:
+      self.st['anomaly'] = True
+      self.st['increased_r'] = False
+  
 
   def anomaly_EWMA(self):
     """ Track e_ratio for sharp dips and spikes using EWMA """
@@ -782,50 +797,49 @@ class FRAHST():
       st['h_window'][-1,:] = np.nan_to_num(st['ht'])
 
     ''' Forcasting '''
-    if st['t'] > p['ht_AR_win']:
-      # Get Coefficents for ht+1
-      # Get h-buffer window (can speed this up latter)
-      #h_buffer = np.nan_to_num(res['hidden'][t-h_AR_buff:t, :])
-      pred_h = np.zeros((st['r'],1))
-      for i in range(st['r']):
-        coeffs = burg_AR(p['AR_order'], st['h_window'][:,i])
-        for j in range(p['AR_order']):
-          pred_h[i,0] -= coeffs[j] * st['h_window'][-1-j, i]
+    #if st['t'] > p['ht_AR_win']: # Sod it, do every time step 
+    # Get Coefficents for ht+1
+    # Get h-buffer window (can speed this up latter)
+    #h_buffer = np.nan_to_num(res['hidden'][t-h_AR_buff:t, :])
+    pred_h = np.zeros((st['r'],1))
+    for i in range(st['r']):
+      coeffs = burg_AR(p['AR_order'], st['h_window'][:,i])
+      for j in range(p['AR_order']):
+        pred_h[i,0] -= coeffs[j] * st['h_window'][-1-j, i]
 
+    # Calculate Prediction error based on last time step prediction  
+    st['pred_err'] = np.abs(st['pred_zt'] - zt.T)
+    st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / self.numStreams
+    st['pred_err_norm'] = npl.norm(st['pred_zt'] - zt.T)
 
-      # Calculate Prediction error based on last time step prediction  
-      st['pred_err'] = np.abs(st['pred_zt'] - zt.T)
-      st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / self.numStreams
-      st['pred_err_norm'] = npl.norm(st['pred_zt'] - zt.T)
+    # Update prediction for next time step 
+    st['pred_zt'] = dot(st['Q'][:,:st['r']], pred_h).T
 
-      # Update prediction for next time step 
-      st['pred_zt'] = dot(st['Q'][:,:st['r']], pred_h).T
+    '''Anomaly Test'''
+    # Build/Slide pred_err_window
+    if  st.has_key('pred_err_win'):
+      st['pred_err_win'][:-1] = st['pred_err_win'][1:] # Shift Window
+      st['pred_err_win'][-1] = st['pred_err_norm']**2
+      #st['pred_err_win'][-1] = st['pred_err_norm']
+    else:
+      st['pred_err_win'] = np.zeros(p['sample_N'] + p['dependency_lag'])
+      st['pred_err_win'][-1] = st['pred_err_norm']**2
+      #st['pred_err_win'][-1] = st['pred_err_norm']
 
-      '''Anomaly Test'''
-      # Build/Slide pred_err_window
-      if  st.has_key('pred_err_win'):
-        st['pred_err_win'][:-1] = st['pred_err_win'][1:] # Shift Window
-        st['pred_err_win'][-1] = st['pred_err_norm']**2
-        #st['pred_err_win'][-1] = st['pred_err_norm']
-      else:
-        st['pred_err_win'] = np.zeros(p['sample_N'] + p['dependency_lag'])
-        st['pred_err_win'][-1] = st['pred_err_norm']**2
-        #st['pred_err_win'][-1] = st['pred_err_norm']
+    #if st['t'] >=  (p['sample_N'] + p['dependency_lag']) : 
+    # Differenced squared norms of the residules. 
+    # If i wish to sample every other point instead, I will need to adjust size of pred_err_win above         
+    #st['pred_dsn_sample'] = st['pred_err_win'][::2] - st['pred_err_win'][1::2] 
+    #st['pred_dsn_sample'] = np.diff(st['pred_err_win'], axis = 0)[::2]
 
-      if st['t'] >=  (p['sample_N'] + p['dependency_lag']) : 
-        # Differenced squared norms of the residules. 
-        # If i wish to sample every other point instead, I will need to to adjust size of pred_err_win above         
-        #st['pred_dsn_sample'] = st['pred_err_win'][::2] - st['pred_err_win'][1::2] 
-        #st['pred_dsn_sample'] = np.diff(st['pred_err_win'], axis = 0)[::2]
+    st['pred_dsn_sample'] = np.diff(st['pred_err_win'], axis = 0)
+    st['pred_dsn'] = st['pred_dsn_sample'][-1]
 
-        st['pred_dsn_sample'] = np.diff(st['pred_err_win'], axis = 0)
-        st['pred_dsn'] = st['pred_dsn_sample'][-1]
+    x_sample = (st['pred_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
+    st['t_stat'] = st['pred_dsn'] / np.sqrt( x_sample / p['sample_N'])
 
-        x_sample = (st['pred_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
-        st['t_stat'] = st['pred_dsn'] / np.sqrt( x_sample / p['sample_N'])
-
-        if np.abs(st['t_stat']) > p['x_thresh']:
-          st['anomaly'] = True
+    if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
+      st['anomaly'] = True
 
     self.st = st
 
@@ -853,27 +867,26 @@ class FRAHST():
       st['h_window'][-1,:] = np.nan_to_num(st['ht'])
 
     ''' Forcasting '''
-    if st['t'] > p['ht_AR_win']:
-      # Get Coefficents for ht+1
-      # Get h-buffer window (can speed this up latter)
-      #h_buffer = np.nan_to_num(res['hidden'][t-h_AR_buff:t, :])
-      pred_h = np.zeros((st['r'],1))
-      for i in range(st['r']):
-        coeffs = burg_AR(p['AR_order'], st['h_window'][:,i])
-        for j in range(p['AR_order']):
-          pred_h[i,0] -= coeffs[j] * st['h_window'][-1-j, i]
+    # Get Coefficents for ht+1
+    # Get h-buffer window (can speed this up latter)
+    #h_buffer = np.nan_to_num(res['hidden'][t-h_AR_buff:t, :])
+    pred_h = np.zeros((st['r'],1))
+    for i in range(st['r']):
+      coeffs = burg_AR(p['AR_order'], st['h_window'][:,i])
+      for j in range(p['AR_order']):
+        pred_h[i,0] -= coeffs[j] * st['h_window'][-1-j, i]
 
-      # Calculate Prediction error based on last time step prediction  
-      st['pred_err'] = np.abs(st['pred_zt'] - zt.T)
-      st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / self.numStreams
-      st['pred_err_norm'] = npl.norm(st['pred_zt'] - zt.T)
+    # Calculate Prediction error based on last time step prediction  
+    st['pred_err'] = np.abs(st['pred_zt'] - zt.T)
+    st['pred_err_ave'] = np.abs(st['pred_zt'] - zt.T).sum() / self.numStreams
+    st['pred_err_norm'] = npl.norm(st['pred_zt'] - zt.T)
 
-      # Update prediction for next time step 
-      st['pred_zt'] = dot(st['Q'][:,:st['r']], pred_h).T
+    # Update prediction for next time step 
+    st['pred_zt'] = dot(st['Q'][:,:st['r']], pred_h).T
 
-      '''Anomaly Test'''
-      if st['pred_err_norm']**2 > p['x_thresh']:
-        st['anomaly'] = True
+    '''Anomaly Test'''
+    if st['t'] > p['ignoreUp2'] and st['pred_err_norm']**2 > p['x_thresh']:
+      st['anomaly'] = True
 
     self.st = st
 
@@ -898,18 +911,17 @@ class FRAHST():
       st['recon_err_win'][-1] = st['recon_err_norm']**2
       #st['recon_err_win'][-1] = st['recon_err_norm']
 
-    if st['t'] >=  (p['sample_N'] + p['dependency_lag']) : 
-      # Differenced squared norms of the residules. 
-      #st['rec_dsn_sample'] = st['recon_err_win'][::2] - st['recon_err_win'][1::2] 
-      #st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)[::2]
-      st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)
-      st['rec_dsn'] = st['rec_dsn_sample'][-1]
+    # Differenced squared norms of the residules. 
+    #st['rec_dsn_sample'] = st['recon_err_win'][::2] - st['recon_err_win'][1::2] 
+    #st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)[::2]
+    st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)
+    st['rec_dsn'] = st['rec_dsn_sample'][-1]
 
-      x_sample = (st['rec_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
-      st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / p['sample_N']) 
+    x_sample = (st['rec_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
+    st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / p['sample_N']) 
 
-      if np.abs(st['t_stat']) > p['x_thresh']:
-        st['anomaly'] = True
+    if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
+      st['anomaly'] = True
 
     self.st = st 
 
@@ -941,6 +953,11 @@ class FRAHST():
       
     if title is None:
       title = (self.p['version'])
+      
+    if 'S' in self.A_version:
+      thresh = self.p['t_thresh']
+    elif 'T' in self.A_version:
+      thresh = self.p['x_thresh']
     
     num_plots = len(var)
     
@@ -960,9 +977,9 @@ class FRAHST():
       plot_2x1(var[0], var[1], ynames[:2], xname, main_title = title)
       
       if hline == 1:
-        plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
-        plt.hlines(+self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
-        plt.ylim(-2*self.p['x_thresh'],2*self.p['x_thresh'])
+        plt.hlines(-thresh, 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.hlines(+thresh, 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.ylim(-2*thresh,2*thresh)
         
       if anom == 1:
         f = plt.gcf()
@@ -975,9 +992,9 @@ class FRAHST():
 
       
       if hline == 1:
-        plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
-        plt.hlines(+self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed') 
-        plt.ylim(-2*self.p['x_thresh'],2*self.p['x_thresh'])
+        plt.hlines(-thresh, 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.hlines(+thresh, 0, self.res['ht'].shape[0], linestyles = 'dashed') 
+        plt.ylim(-2*thresh,2*thresh)
         
       if anom == 1:
         f = plt.gcf()
@@ -990,9 +1007,9 @@ class FRAHST():
       plt.title(title)
       
       if hline == 1:
-        plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
-        plt.hlines(+self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')               
-        plt.ylim(-2*self.p['x_thresh'],2*self.p['x_thresh'])
+        plt.hlines(-thresh, 0, self.res['ht'].shape[0], linestyles = 'dashed')
+        plt.hlines(+thresh, 0, self.res['ht'].shape[0], linestyles = 'dashed')               
+        plt.ylim(-2*thresh,2*thresh)
         
       if anom == 1:
         f = plt.gcf()
@@ -1013,11 +1030,11 @@ if __name__=='__main__':
         # AR Anomaly detection 
         'ht_AR_win' : 30,
         'AR_order' : 1,
-        'err_thresh' : 1.5, 
+        'x_thresh' : 1.5, 
         # Statistical 
         'sample_N' : 20,
         'dependency_lag' : 1,
-        'x_thresh' : 10,
+        't_thresh' : None,
         'FP_rate' : 10**-4,
         # Q statistical 
         'Q_lag' : 5,
@@ -1031,9 +1048,9 @@ if __name__=='__main__':
         'r_upper_bound' : None,
         'fix_init_Q' : 0,
         'small_value' : 0.0001,
-        'ignoreUp2' : 0 }
+        'ignoreUp2' : 50 }
       
-  p['x_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
+  p['t_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
 
   ''' Load Data '''
   data = load_ts_data('isp_routers', 'full')
@@ -1043,7 +1060,7 @@ if __name__=='__main__':
   numStreams = data.shape[1]
 
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.R-eig.A-recS', p, numStreams)
+  Frahst_alg = FRAHST('F-7.A-eng.R-eig', p, numStreams)
 
   '''Begin Frahst'''
   # Main iterative loop. 
@@ -1068,13 +1085,13 @@ if __name__=='__main__':
 
     '''Store data''' 
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
-    tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
+    #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
     #tracked_values = ['ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
-        
+    tracked_values = ['ht','e_ratio','r','recon']
 
     Frahst_alg.track_var(tracked_values)
 
   ''' Plot Results '''
   #Frahst_alg.plot_res([data, 'ht', 't_stat'])
-  Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
+  Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
 
