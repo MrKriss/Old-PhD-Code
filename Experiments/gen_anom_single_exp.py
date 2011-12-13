@@ -44,7 +44,6 @@ p = {'alpha': 0.98,
       # Pedro Adaptive
       'e_low' : 0.95,
       'e_high' : 0.98,
-      'static_r' : 0,
       'r_upper_bound' : None,
       'fix_init_Q' : 0,
       'small_value' : 0.0001,

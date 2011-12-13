@@ -33,7 +33,7 @@ class FRAHST():
   R = Rank adjustment Version
   A = Anomaly Version
 
-  Format = 'F-xxxx.R-xxxx.A-xxxx'
+  Format = 'F-xxxx.A-xxxx.R-xxxx'
 
   """
 
@@ -42,8 +42,8 @@ class FRAHST():
     self.p['version'] = version
 
     self.F_version = version.split('.')[0]
-    self.R_version = version.split('.')[1]
-    self.A_version = version.split('.')[2]
+    self.A_version = version.split('.')[1]
+    self.R_version = version.split('.')[2]
     self.numStreams = numStreams
 
     """ Initialise all Frahst variables """
@@ -85,37 +85,54 @@ class FRAHST():
     elif 'F-3' in version.split('.')[0]:        
       self.st['lastChangeAt'] = 0.0
       
+    if 'eng' in self.R_version:
+      self.st['lastChangeAt'] = 0.0
+      
     # Preliminary setup for forcasting methods.
     # May put all initialisation checks here eventually
     if 'for' in self.A_version: 
-        self.st['pred_zt'] = np.zeros(numStreams)
-        self.st['pred_err'] = np.zeros(numStreams)
-        self.st['pred_err_norm'] = 0.0
-        self.st['pred_err_ave'] = 0.0    
+      self.st['pred_zt'] = np.zeros(numStreams)
+      self.st['pred_err'] = np.zeros(numStreams)
+      self.st['pred_err_norm'] = 0
+      self.st['pred_err_ave'] = 0  
+      self.st['t_stat'] = 0
+      self.st['pred_dsn'] = 0
+    if 'rec' in self.A_version:
+      self.st['recon_err'] = np.zeros(numStreams)
+      self.st['rec_err_norm'] = 0
+      self.st['t_stat'] = 0
+      self.st['rec_dsn'] = 0
+      
 
   def run(self, zt):
     if 'F-7' in self.F_version:
       self.FRAHST_V7_0_iter(zt)
     elif 'F-3' in self.F_version:
       self.FRAHST_V3_1_iter(zt)
+    else:
+      print 'Did not run: Specified F-xxxx not recognised'
 
   def rank_adjust(self, zt):
     # Check whether r is static 
-    if self.p['static_r'] != 1:
+    if 'static' not in self.R_version:
       if 'R-eig' in self.R_version:
         self.rank_adjust_eigen(zt)
       elif 'R-eng' in self.R_version:
         self.rank_adjust_energy(zt)
+      else:
+        print 'Did not run rank adjust: Specified R-xxxx not recognised'
 
   def detect_anom(self, zt):
     if 'A-forS' in self.A_version:
-      self.anomaly_AR_forcast_stat()
+      self.anomaly_AR_forcast_stat(zt)
     elif 'A-forT' in self.A_version:
-      self.anomaly_AR_forcast_thresh()
+      self.anomaly_AR_forcast_thresh(zt)
     elif 'A-recS' in self.A_version:
       self.anomaly_recon_stat(zt)
     elif 'A-ewma' in self.A_version:
       self.anomaly_EWMA()
+    else:
+      print 'Did not run detect anomalies: Specified A-xxxx not recognised'
 
   def FRAHST_V3_1_iter(self, zt):
     ''' 
@@ -559,6 +576,7 @@ class FRAHST():
     """ Adjust rank r of subspace accoring to Pedros Energy-adaptive method """
 
     st = self.st
+    p = self.p
 
     Q = st['Q']
     S = st['S']
@@ -730,7 +748,7 @@ class FRAHST():
     self.st = st
 
 
-  def anomaly_AR_forcast_stat(self):
+  def anomaly_AR_forcast_stat(self, zt):
     """ Use Auto Regressive prediction and T statistic to calculate anomalies 
 
         Step 1: Calculate prediction of next data point z_t+1 by fitting 
@@ -754,12 +772,6 @@ class FRAHST():
 
     st = self.st
     p = self.p
-
-    # initialise variables that are not yet present 
-    if not st.has_key('t_stat'):
-      st['t_stat'] = 0
-      st['pred_dsn'] = 0
-      st['x_sample'] = 0    
 
     # Build/Slide h_window
     if  st.has_key('h_window'):
@@ -809,15 +821,15 @@ class FRAHST():
         st['pred_dsn_sample'] = np.diff(st['pred_err_win'], axis = 0)
         st['pred_dsn'] = st['pred_dsn_sample'][-1]
 
-        st['x_sample'] = (st['pred_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
-        st['t_stat'] = st['pred_dsn'] / np.sqrt(st['x_sample']/ p['sample_N'])
+        x_sample = (st['pred_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
+        st['t_stat'] = st['pred_dsn'] / np.sqrt( x_sample / p['sample_N'])
 
         if np.abs(st['t_stat']) > p['x_thresh']:
           st['anomaly'] = True
 
     self.st = st
 
-  def anomaly_AR_forcast_thresh(self):
+  def anomaly_AR_forcast_thresh(self, zt):
     """ Use Auto Regressive prediction and T statistic to calculate anomalies 
 
         Step 1: Calculate prediction of next data point z_t+1 by fitting 
@@ -871,11 +883,6 @@ class FRAHST():
     st = self.st
     p = self.p  
 
-    if not st.has_key('t_stat'):
-      st['t_stat'] = 0
-      st['rec_dsn'] = 0
-      st['x_sample'] = 0
-
     st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
 
     st['recon_err'] = zt.T - st['recon']
@@ -897,10 +904,9 @@ class FRAHST():
       #st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)[::2]
       st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)
       st['rec_dsn'] = st['rec_dsn_sample'][-1]
-      if True : 
 
-        st['x_sample'] = (st['rec_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
-        st['t_stat'] = st['rec_dsn'] / np.sqrt(st['x_sample']/ p['sample_N']) 
+      x_sample = (st['rec_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
+      st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / p['sample_N']) 
 
       if np.abs(st['t_stat']) > p['x_thresh']:
         st['anomaly'] = True
@@ -1019,7 +1025,6 @@ if __name__=='__main__':
         # Pedro Adaptive
         'e_low' : 0.95,
         'e_high' : 0.98,
-        'static_r' : 0,
         'r_upper_bound' : None,
         'fix_init_Q' : 0,
         'small_value' : 0.0001,
