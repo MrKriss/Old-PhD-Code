@@ -28,7 +28,7 @@ results_path = '/Users/chris/Dropbox/Work/MacSpyder/Results/'
 cwd = os.getcwd()
 path = os.path.join(results_path, exp_name)
 
-initial_conditions = 5      # i - No. of generated data sets to test
+initial_conditions = 1    # i - No. of generated data sets to test
 
 anomaly_type = 'peak_dip'
 gen_funcs = dict(peak_dip = gen_a_peak_dip,
@@ -71,7 +71,7 @@ a = { 'N' : 50,
 #----Varied----#
 '''Algorithms'''    
 alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 
-                'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng']
+                'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng', 'F-7.A-forS.R-static' ]
 
 # Data set changes 
 dat_changes = {'N' : [50]} # Need min one entry for loop
@@ -103,9 +103,10 @@ for var, values in dat_changes.iteritems():
     a[var] = v
     for i in xrange(initial_conditions):
       # Generate the data
-      a['seed'] = i
+      #a['seed'] = i
       D = gen_funcs[anomaly_type](**a) # so tidy!
       data = D['data']
+      print 'Generated Data set'
       
       ''' Run Algorithm '''
       # For each Change to Algorith Parameters 
@@ -113,9 +114,9 @@ for var, values in dat_changes.iteritems():
         for v in values:
           # update algorithm parameters p
           p[var] = v      
+          data = zscore_win(data, p['z_win'])
           for alg_v in alg_versions:
             '''Initialise'''
-            data = zscore_win(data, p['z_win'])
             z_iter = iter(data)
             numStreams = data.shape[1]
             F = FRAHST(alg_v, p, numStreams)   
@@ -149,6 +150,6 @@ for var, values in dat_changes.iteritems():
             
             ''' Plot Results '''
             #F.plot_res([data, 'ht', 't_stat'])
-            F.plot_res([data, 'ht', 't_stat'])
+            F.plot_res([data, 'ht', 'r', 't_stat'])
             
                           

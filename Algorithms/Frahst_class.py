@@ -951,12 +951,13 @@ class FRAHST():
     if num_plots == 1:
       plt.figure()
       plt.plot(var[0])
+      plt.title(title)
       if anom == 1:
         for x in self.res['anomalies']:
           plt.axvline(x, ymin=0.25, color='r')        
       
     elif num_plots == 2:
-      plot_2x1(var[0], var[1], ynames[:2], xname)
+      plot_2x1(var[0], var[1], ynames[:2], xname, main_title = title)
       
       if hline == 1:
         plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
@@ -970,7 +971,8 @@ class FRAHST():
             ax.axvline(x, ymin=0.25, color='r')              
         
     elif num_plots == 3:
-      plot_3x1(var[0], var[1], var[2], ynames[:3] , xname) 
+      plot_3x1(var[0], var[1], var[2], ynames[:3] , xname, main_title = title) 
+
       
       if hline == 1:
         plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
@@ -984,7 +986,8 @@ class FRAHST():
             ax.axvline(x, ymin=0.25, color='r')         
                
     elif num_plots == 4:
-      plot_4x1(var[0], var[1], var[2], var[3], ynames[:4], xname)
+      plot_4x1(var[0], var[1], var[2], var[3], ynames[:4], xname, main_title = title)
+      plt.title(title)
       
       if hline == 1:
         plt.hlines(-self.p['x_thresh'], 0, self.res['ht'].shape[0], linestyles = 'dashed')
