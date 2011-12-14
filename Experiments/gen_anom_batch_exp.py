@@ -20,6 +20,21 @@ from Frahst_class import FRAHST
 Code Description: Runs Batch of experiments on synthetic anomalous data  
   .
 """
+
+def gen_data(a, init_c, seed = 0):
+
+  D = [0] * init_c
+
+  for i in xrange(init_c):
+    # Generate the data
+    if seed == 1:
+      a['seed'] = i
+    else:
+      D[i] = gen_funcs[anomaly_type](**a) # so tidy!
+      
+  return D
+
+
 '''Batch Parameters'''
 #-----Fixed-----#
 # Path Setup 
@@ -28,7 +43,7 @@ results_path = '/Users/chris/Dropbox/Work/MacSpyder/Results/'
 cwd = os.getcwd()
 path = os.path.join(results_path, exp_name)
 
-initial_conditions = 1    # i - No. of generated data sets to test
+initial_conditions = 4   # i - No. of generated data sets to test
 
 anomaly_type = 'peak_dip'
 gen_funcs = dict(peak_dip = gen_a_peak_dip,
@@ -37,25 +52,26 @@ gen_funcs = dict(peak_dip = gen_a_peak_dip,
 
 # Default Shared Algorithm Parameters 
 p = {'alpha': 0.98, 'init_r' : 1, 
-      # Pedro Anomal Detection
-      'holdOffTime' : 0,
-      # EWMA Anomaly detection
-      'EWMA_filter_alpha' : 0.2, 'residual_thresh' : 0.02,
-      # AR Anomaly detection 
-      'ht_AR_win' : 30, 'AR_order' : 1, 'err_thresh' : 1.5, 
-      # Statistical 
-      'sample_N' : 20, 'dependency_lag' : 20, 'x_thresh' : 10, 'FP_rate' : 10**-5,
-      # Eigen-Adaptive
-      'F_min' : 0.9, 'epsilon' : 0.05,
-      # Pedro Adaptive
-      'e_low' : 0.95, 'e_high' : 0.98,
-      # Other Shared
-      'r_upper_bound' : None,
-      'fix_init_Q' : 0,
-      'small_value' : 0.0001,
-      'ignoreUp2' : 50,
-      'z_win' : 100 }
-p['x_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
+     # Pedro Anomal Detection
+     'holdOffTime' : 0,
+     # EWMA Anomaly detection
+     'EWMA_filter_alpha' : 0.2, 'residual_thresh' : 0.02,
+     # AR Anomaly detection 
+     'ht_AR_win' : 30, 'AR_order' : 1, 'x_thresh' : 1.5, 
+     # Statistical 
+     'sample_N' : 20, 'dependency_lag' : 20, 't_thresh' : None, 'FP_rate' : 10**-5,
+     # Eigen-Adaptive
+     'F_min' : 0.9, 'epsilon' : 0.05,
+     # Pedro Adaptive
+     'e_low' : 0.95, 'e_high' : 0.98,
+     # Other Shared
+     'r_upper_bound' : None,
+     'fix_init_Q' : 0,
+     'small_value' : 0.0001,
+     'ignoreUp2' : 50,
+     'z_win' : 100 }
+
+p['t_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
 
 # Default Shared Data Set Parameters
 a = { 'N' : 50, 
@@ -70,8 +86,9 @@ a = { 'N' : 50,
 
 #----Varied----#
 '''Algorithms'''    
-alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 
-                'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng', 'F-7.A-forS.R-static' ]
+alg_versions = ['F-7.A-recS.R-eig']
+#alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 
+                                #'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng', 'F-7.A-forS.R-static' ]
 
 # Data set changes 
 dat_changes = {'N' : [50]} # Need min one entry for loop
@@ -80,7 +97,7 @@ dat_changes = {'N' : [50]} # Need min one entry for loop
 # Algorithm Changes
 alg_changes = {'alpha' : [0.98]} # need min one entry for loop 
 #alg_changes = dict(F_min = [0.95, 0.9, 0.85, 0.8],
-                   #alpha = [0.99, 0.98, 0.97, 0.96])
+                                      #alpha = [0.99, 0.98, 0.97, 0.96])
 
 # Conting iterations 
 alg_ver_count = len(alg_versions)
@@ -94,8 +111,15 @@ total_loops = alg_ver_count, alg_change_count, dat_change_count
 
 # For Profiling 
 start = time.time() 
+anomalies_table = []
+#anomaly_table = np.zeros(len(D['gt']), dtype = [('run','i4'),('start','i4'),('loc','i4'),('len','i4'),('mag','i4'),('type','a10')])
 
 '''Generate Data Set'''
+
+
+  
+
+
 # For each Change to Dataset Parameters
 for var, values in dat_changes.iteritems():
   for v in values:
@@ -105,9 +129,23 @@ for var, values in dat_changes.iteritems():
       # Generate the data
       #a['seed'] = i
       D = gen_funcs[anomaly_type](**a) # so tidy!
+      num_anom = len(D['gt'])
       data = D['data']
+
+      entry = np.zeros(1, dtype = [('start','i4', (num_anom,)), ('loc','i4', (num_anom,)), ('len','i4', (num_anom,)), ('mag','i4',(num_anom,)),('type','a10', (num_anom,))])
+      entry['start'] = D['gt']['start']
+      entry['loc'] = D['gt']['loc']
+      entry['len'] = D['gt']['len']
+      entry['mag'] = D['gt']['mag']
+      entry['type'] = D['gt']['type']
+
+      if 'anomaly_table' in locals():      
+        anomaly_table = np.vstack((anomaly_table, entry))
+      else:
+        anomaly_table = entry
+
       print 'Generated Data set'
-      
+
       ''' Run Algorithm '''
       # For each Change to Algorith Parameters 
       for var, values in alg_changes.iteritems():
@@ -125,31 +163,30 @@ for var, values in dat_changes.iteritems():
             # Main iterative loop. 
             for zt in z_iter:
               zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
-            
+
               if F.st['anomaly'] == True:
                 F.st['anomaly'] = False # reset anomaly var
-            
+
               '''Frahst Version '''
               F.run(zt)
               # Calculate reconstructed data if needed
               st = F.st
               F.st['recon'] = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
-            
+
               '''Anomaly Detection method''' 
               F.detect_anom(zt)
-            
+
               '''Rank adaptation method''' 
               F.rank_adjust(zt)
-            
-              '''Store data''' 
-              #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
-              #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
-              tracked_values = ['ht','e_ratio','r','recon', 't_stat']
-            
-              F.track_var(tracked_values)
-            
-            ''' Plot Results '''
-            #F.plot_res([data, 'ht', 't_stat'])
-            F.plot_res([data, 'ht', 'r', 't_stat'])
-            
-                          
+
+              '''Store Values'''
+              F.track_var()
+
+
+            # Record Anomalies over whole batch
+            anomalies_table.append(F.res['anomalies'])
+
+
+          # Anamlyise  FP FN TP etc. 
+          F.analysis(D['gt'])
+

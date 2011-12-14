@@ -119,6 +119,7 @@ def gen_a_peak_dip(N, T, L, M, pA, k = 5, interval = [10,121], seed = None, nois
       if npr.rand() <= p:
         anoms.append(i) 
         num_needed -= 1
+        num_left -=1
       else:
         num_left -=1   
     A[:,anoms] = A[:,anoms] + np.atleast_2d(s0lin).T
@@ -126,8 +127,15 @@ def gen_a_peak_dip(N, T, L, M, pA, k = 5, interval = [10,121], seed = None, nois
     anoms = npr.randint(N)
     A[:,anoms] = A[:,anoms] + np.array(s0lin)
 
-  output = dict(data = A, a_stream = anoms, a_start = start_point, 
-                a_type = anom_type, a_L = L, a_M = M, trends = sins, periods = periods)
+  ''' Grount truth Table '''
+  if anoms.__class__ == int:
+    anoms = [anoms]
+  
+  gt_table = np.zeros(num_anom, dtype = [('start','i4'),('loc','i4'),('len','i4'),('mag','i4'),('type','a10')])
+  for i, a in enumerate(anoms):
+    gt_table[i] = (start_point, a, L, M, anom_type)
+
+  output = dict(data = A, gt = gt_table, trends = sins, periods = periods)
 
   return output
 
@@ -151,13 +159,6 @@ def gen_a_step(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_si
       else:
         num_left -=1     
 
-  #if seed is not None:
-    ## Code to make random sins combination 
-    #A, sins = sin_rand_combo(N, T, periods, seed = seed, noise_scale = noise_sig)
-    #npr.seed(seed)
-  #else:
-    ## Code to make random sins combination 
-  
   # Seed already set at start of function 
   A, sins = sin_rand_combo(N, T, periods, noise_scale = noise_sig)
 
@@ -195,6 +196,7 @@ def gen_a_step(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_si
       if npr.rand() <= p:
         anoms.append(i) 
         num_needed -= 1
+        num_left -=1
       else:
         num_left -=1   
     A[:,anoms] = A[:,anoms] + np.atleast_2d(s0lin).T
@@ -202,9 +204,16 @@ def gen_a_step(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_si
     anoms = npr.randint(N)
     A[:,anoms] = A[:,anoms] + np.array(s0lin)
 
-  output = dict(data = A, a_stream = anoms, a_start = start_point, 
-                a_type = anom_type, a_L = L, a_M = M, trends = sins)
+  ''' Ground Truth Table '''
+  if anoms.__class__ == int:
+    anoms = [anoms]
+  
+  gt_table = np.zeros(num_anom, dtype = [('start','i4'),('loc','i4'),('len','i4'),('mag','i4'),('type','a10')])
+  for i, a in enumerate(anoms):
+    gt_table[i] = (start_point, a, L, M, anom_type)
 
+  output = dict(data = A, gt = gt_table, trends = sins, periods = periods)
+  
   return output
 
 
@@ -229,13 +238,6 @@ def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, 
       else:
         num_left -=1       
 
-  #if seed is not None:
-    ## Code to make random sins combination 
-    #A, sins = sin_rand_combo(N, T, periods, seed = seed, noise_scale = noise_sig)
-    #npr.seed(seed)
-  #else:
-    ## Code to make random sins combination 
-  
   # Seed already set at start of function 
   A, sins = sin_rand_combo(N, T, periods, noise_scale = noise_sig)
 
@@ -247,13 +249,13 @@ def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, 
 
   # Randomly choose peak or dip 
   if npr.rand() < 0.5:
-    anom_type = 'Grad Up -- Down'
+    anom_type = 'Grad Up--Down'
     s0lin = Tseries(0)
     s0lin.makeSeries([1,3,1,4,1], [start_point, L/2, L2, L/2, T - start_point - L - L2], 
                      [baseLine, baseLine, baseLine + M, baseLine + M, baseLine], 
                     gradient = float(M)/float(L/2), noise_type ='none')
   else:
-    anom_type = 'Grad Down -- Up'
+    anom_type = 'Grad Down--Up'
     s0lin = Tseries(0)
     s0lin.makeSeries([1,4,1,3,1], [start_point, L/2, L2, L/2, T - start_point - L - L2], 
                      [baseLine, baseLine, baseLine - M, baseLine - M, baseLine], 
@@ -275,6 +277,7 @@ def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, 
       if npr.rand() <= p:
         anoms.append(i) 
         num_needed -= 1
+        num_left -=1
       else:
         num_left -=1   
     A[:,anoms] = A[:,anoms] + np.atleast_2d(s0lin).T
@@ -282,9 +285,20 @@ def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, 
     anoms = npr.randint(N)
     A[:,anoms] = A[:,anoms] + np.array(s0lin)
   
-  output = dict(data = A, a_stream = anoms, a_start = start_point, 
-                a_type = anom_type, a_L = L, a_M = M, trends = sins)
+  ''' Ground Truth Table '''
+  if anoms.__class__ == int:
+    anoms = [anoms]
+  
+  gt_table = np.zeros(num_anom*2, dtype = [('start','i4'),('loc','i4'),('len','i4'),('mag','i4'),('type','a10')])
+  count = 0
+  for i, a in enumerate(anoms):
+    a1_type = anom_type[5:].split('--')[0]
+    a2_type = anom_type[5:].split('--')[1]    
+    gt_table[i+count] = (start_point, a, L, M, 'Grad ' + a1_type)
+    gt_table[i+count+1] = (start_point+L2+L/2.0, a, L, M, 'Grad ' + a2_type)
+    count += 1
 
+  output = dict(data = A, gt = gt_table, trends = sins, periods = periods)
   return output
 
 if __name__=='__main__':

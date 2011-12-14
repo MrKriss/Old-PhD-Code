@@ -12,16 +12,16 @@ import numpy.linalg as npl
 import matplotlib.pyplot as plt
 
 from plot_utils import plot_2x1, plot_3x1, plot_4x1
-from utils import QRsolveA, QRsolve_eigV
-from normalisationFunc import zscore
+from utils import QRsolveA, QRsolve_eigV, fmeasure, analysis
+from normalisationFunc import zscore, zscore_win
 from burg_AR import burg_AR
 
 from load_data import load_data, load_ts_data
 from artSigs import sin_rand_combo, simple_sins, simple_sins_3z
+from gen_anom_data import gen_a_grad_persist, gen_a_peak_dip, gen_a_step
 
 """
-Code Description:
-  .
+Code Description: The class that hlds all Frahst related Functions 
 """
 
 class FRAHST():
@@ -34,7 +34,6 @@ class FRAHST():
   A = Anomaly Version
 
   Format = 'F-xxxx.A-xxxx.R-xxxx'
-
   """
 
   def __init__(self, version, p, numStreams):
@@ -111,31 +110,31 @@ class FRAHST():
     elif 'F-3' in self.F_version:
       self.FRAHST_V3_1_iter(zt)
     else:
-      print 'Did not run: Specified F-xxxx not recognised'
+      print 'Did not run: %s not recognised' % (self.F_version)
 
   def rank_adjust(self, zt):
     # Check whether r is static 
     if 'static' not in self.R_version:
-      if 'R-eig' in self.R_version:
+      if 'eig' in self.R_version:
         self.rank_adjust_eigen(zt)
-      elif 'R-eng' in self.R_version:
+      elif 'eng' in self.R_version:
         self.rank_adjust_energy(zt)
       else:
-        print 'Did not run rank adjust: Specified R-xxxx not recognised'
+        print 'Did not run rank adjust: %s not recognised' % (self.R_version)
 
   def detect_anom(self, zt):
-    if 'A-forS' in self.A_version:
+    if 'forS' in self.A_version:
       self.anomaly_AR_forcast_stat(zt)
-    elif 'A-forT' in self.A_version:
+    elif 'forT' in self.A_version:
       self.anomaly_AR_forcast_thresh(zt)
-    elif 'A-recS' in self.A_version:
+    elif 'recS' in self.A_version:
       self.anomaly_recon_stat(zt)
-    elif 'A-ewma' in self.A_version:
+    elif 'ewma' in self.A_version:
       self.anomaly_EWMA()
     elif 'eng' in self.A_version:
       self.anomaly_eng()
     else:
-      print 'Did not run detect anomalies: Specified A-xxxx not recognised'
+      print 'Did not run detect anomalies:  %s not recognised' % (self.A_version)
 
   def FRAHST_V3_1_iter(self, zt):
     ''' 
@@ -925,7 +924,7 @@ class FRAHST():
 
     self.st = st 
 
-  def track_var(self, values):
+  def track_var(self, values = ()):
     
     if not hasattr(self, 'res'):
       # initalise res
@@ -1017,6 +1016,219 @@ class FRAHST():
           for x in self.res['anomalies']:
             ax.axvline(x, ymin=0.25, color='r')           
 
+  
+  def analysis(self, gt_table, epsilon = 0, accumulative = 1, keep_sets = 1):
+      ''' Calculate all anomally detection Metrics 
+      
+      # epsilon: used to allow for lagged detections: if Anomaly occurs in time window
+      anom_start - anom_end + eplsilon it is considered a TP
+      
+      # Acts accumulateive 
+      
+      '''
+      # Detections  
+      D = np.array(self.res['anomalies'])
+      index =  D > self.p['ignoreUp2'] 
+      D = set(list(D[index]))        
+      
+      # Total Neg 
+      pred_total_N = self.st['t'] - self.p['ignoreUp2'] - len(D)    
+      
+      # initalise metrics 
+      if 'metric' not in locals() or accumulative == 0:
+        self.metric = { 'TP' : 0.0 ,
+                   'FP' : 0.0 ,
+                   'FN' : 0.0 ,
+                   'TN' : 0.0,
+                   'precision' : 0.0 ,
+                   'recall' : 0.0 ,
+                   'F1' : 0.0, 
+                   'F2' : 0.0, 
+                   'F05' : 0.0,
+                   'FPR' : 0.0,
+                   'FDR' : 0.0,
+                   'ACC' : 0.0}
+        self.detection_sets = []
+        self.anom_detect_tab = []
+
+      # set of point anomalies detected as true
+      anom_TP = set()
+      
+      # Set of anomalous segments detected           
+      anom_segments_detected_set  = set()  
+      
+      # Table to record frequency of anomalous segment detections
+      anomalies_detected_tab  = np.zeros((len (gt_table), 2))
+      anomalies_detected_tab[:,0] = gt_table['start']
+      
+      # TRUE POSITIVES
+      # Run through ground truths 
+      idx = 0
+      for gt in gt_table:
+          count = 0
+          # Run through the list of detections    
+          for d in D :
+              if d >= gt['start']  and d <= gt['start'] + gt['len'] + epsilon:
+                  # if set does not yet contain the anomaly, add it and increment TP
+                  if not anom_segments_detected_set.issuperset(set([gt['start']])):
+                      
+                      anom_segments_detected_set.add(gt['start'])
+                      anom_TP.add(d)
+                      self.metric['TP'] += 1
+                      count += 1
+                  else: # if multiple detections in anomalous segment 
+                      count += 1 
+                      anom_TP.add(d)                    
+                      
+          anomalies_detected_tab[idx,1] = count   
+          idx += 1     
+      
+      # FALSE Pos 
+      anom_FP = D - anom_TP    
+      self.metric['FP'] += len(anom_FP)
+      # FALSE Neg     
+      anom_FN = set(gt_table['start']) - anom_segments_detected_set
+      self.metric['FN'] += len(anom_FN)
+      # True Negatives
+      self.metric['TN'] += pred_total_N - len(anom_FN)
+
+      if self.metric['FP'] == 0 and self.metric['TP'] == 0:
+        self.metric['precision'] += 0
+        self.metric['FDR'] += 0
+      else:
+        self.metric['precision'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FP'])          
+        self.metric['FDR'] = self.metric['FP'] / (self.metric['FP'] + self.metric['TP'])    
+
+      self.metric['recall'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FN'])      
+      self.metric['FPR'] = self.metric['FP'] / (self.metric['TN'] + self.metric['FP'])      
+      self.metric['ACC'] = (self.metric['TP'] + self.metric['TN']) /  \
+                      ( self.metric['TP'] + self.metric['FN'] + self.metric['TN'] + self.metric['FP'] )
+                      
+      self.metric['F1'] = self.fmeasure(1, self.metric['TP'], self.metric['FN'], self.metric['FP'])
+      self.metric['F2'] = self.fmeasure(2, self.metric['TP'], self.metric['FN'], self.metric['FP'])
+      self.metric['F05'] = self.fmeasure(0.5, self.metric['TP'], self.metric['FN'], self.metric['FP']) 
+      
+      if keep_sets == 1:
+        sets = {'TP' : anom_TP,
+                'anom_seg_detected' : anom_segments_detected_set,
+                'FN' : anom_FN,
+                'FP' : anom_FP}     
+        self.detection_sets.append(sets)
+        self.anom_detect_tab.append(anomalies_detected_tab)
+
+  def batch_analysis(self, gt_tables, anomalies_list, epsilon = 0, accumulative = 1, keep_sets = 1):
+      ''' Calculate all anomally detection Metrics 
+      
+      # epsilon: used to allow for lagged detections: if Anomaly occurs in time window
+      anom_start - anom_end + eplsilon it is considered a TP
+      
+      # Acts accumulateive 
+      '''
+      
+      for i in xrange(len(anomalies_list)):
+        
+        gt_table = gt_tables[i]
+        anomalies = anomalies_list[i] 
+      
+      # Detections  
+      D = np.array(anomalies_list)
+      index =  D > self.p['ignoreUp2'] 
+      D = set(list(D[index]))        
+      
+      # Total Neg 
+      pred_total_N = self.st['t'] - self.p['ignoreUp2'] - len(D)    
+      
+      # initalise metrics 
+      if 'metric' not in locals() or accumulative == 0:
+        self.metric = { 'TP' : 0.0 ,
+                   'FP' : 0.0 ,
+                   'FN' : 0.0 ,
+                   'TN' : 0.0,
+                   'precision' : 0.0 ,
+                   'recall' : 0.0 ,
+                   'F1' : 0.0, 
+                   'F2' : 0.0, 
+                   'F05' : 0.0,
+                   'FPR' : 0.0,
+                   'FDR' : 0.0,
+                   'ACC' : 0.0}
+        self.detection_sets = []
+        self.anom_detect_tab = []
+
+      # set of point anomalies detected as true
+      anom_TP = set()
+      
+      # Set of anomalous segments detected           
+      anom_segments_detected_set  = set()  
+      
+      # Table to record frequency of anomalous segment detections
+      anomalies_detected_tab  = np.zeros((len (gt_table), 2))
+      anomalies_detected_tab[:,0] = gt_table['start']
+      
+      # TRUE POSITIVES
+      # Run through ground truths 
+      idx = 0
+      for gt in gt_table:
+          count = 0
+          # Run through the list of detections    
+          for d in D :
+              if d >= gt['start']  and d <= gt['start'] + gt['len'] + epsilon:
+                  # if set does not yet contain the anomaly, add it and increment TP
+                  if not anom_segments_detected_set.issuperset(set([gt['start']])):
+                      
+                      anom_segments_detected_set.add(gt['start'])
+                      anom_TP.add(d)
+                      self.metric['TP'] += 1
+                      count += 1
+                  else: # if multiple detections in anomalous segment 
+                      count += 1 
+                      anom_TP.add(d)                    
+                      
+          anomalies_detected_tab[idx,1] = count   
+          idx += 1     
+      
+      # FALSE Pos 
+      anom_FP = D - anom_TP    
+      self.metric['FP'] += len(anom_FP)
+      # FALSE Neg     
+      anom_FN = set(gt_table['start']) - anom_segments_detected_set
+      self.metric['FN'] += len(anom_FN)
+      # True Negatives
+      self.metric['TN'] += pred_total_N - len(anom_FN)
+
+      if self.metric['FP'] == 0 and self.metric['TP'] == 0:
+        self.metric['precision'] += 0
+        self.metric['FDR'] += 0
+      else:
+        self.metric['precision'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FP'])          
+        self.metric['FDR'] = self.metric['FP'] / (self.metric['FP'] + self.metric['TP'])    
+
+      self.metric['recall'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FN'])      
+      self.metric['FPR'] = self.metric['FP'] / (self.metric['TN'] + self.metric['FP'])      
+      self.metric['ACC'] = (self.metric['TP'] + self.metric['TN']) /  \
+                      ( self.metric['TP'] + self.metric['FN'] + self.metric['TN'] + self.metric['FP'] )
+                      
+      self.metric['F1'] = self.fmeasure(1, self.metric['TP'], self.metric['FN'], self.metric['FP'])
+      self.metric['F2'] = self.fmeasure(2, self.metric['TP'], self.metric['FN'], self.metric['FP'])
+      self.metric['F05'] = self.fmeasure(0.5, self.metric['TP'], self.metric['FN'], self.metric['FP']) 
+      
+      if keep_sets == 1:
+        sets = {'TP' : anom_TP,
+                'anom_seg_detected' : anom_segments_detected_set,
+                'FN' : anom_FN,
+                'FP' : anom_FP}     
+        self.detection_sets.append(sets)
+        self.anom_detect_tab.append(anomalies_detected_tab)
+  
+  def fmeasure(self, B, hits, misses, falses) :
+      """ General formular for F measure 
+      
+      Uses TP(hits), FN(misses) and FP(falses)
+      """
+      x = ((1 + B**2) * hits) / ((1 + B**2) * hits + B**2 * misses + falses)
+      return x
+
+
 if __name__=='__main__':
 
   ''' Experimental Run Parameters '''
@@ -1050,48 +1262,62 @@ if __name__=='__main__':
         'small_value' : 0.0001,
         'ignoreUp2' : 50 }
       
+  
   p['t_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
 
-  ''' Load Data '''
-  data = load_ts_data('isp_routers', 'full')
-  #data, sins = sin_rand_combo(5, 1000, [10, 35, 60], noise_scale = 0.2, seed = 1)
-  data = zscore(data)
+  ''' Anomalous Data Parameters '''
+  
+  a = { 'N' : 50, 
+        'T' : 1000, 
+        'periods' : [15, 40, 70, 90,120], 
+        'L' : 10, 
+        'L2' : 200, 
+        'M' : 3, 
+        'pA' : 0.1, 
+        'noise_sig' : 0.3 }
+  
+  D = gen_a_grad_persist(**a)
+  
+  #data = load_ts_data('isp_routers', 'full')
+  data = D['data']
+  data = zscore_win(data, 100)
   z_iter = iter(data)
   numStreams = data.shape[1]
-
+  
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.A-eng.R-eig', p, numStreams)
-
+  Frahst_alg = FRAHST('F-7.A-recS.R-static', p, numStreams)
+  
   '''Begin Frahst'''
   # Main iterative loop. 
   for zt in z_iter:
-
+  
     zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
-
+  
     if Frahst_alg.st['anomaly'] == True:
       Frahst_alg.st['anomaly'] = False # reset anomaly var
-
+  
     '''Frahst Version '''
     Frahst_alg.run(zt)
     # Calculate reconstructed data if needed
     st = Frahst_alg.st
-    Frahst_alg.st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
-
+    Frahst_alg.st['recon'] = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
+  
     '''Anomaly Detection method''' 
     Frahst_alg.detect_anom(zt)
-
+  
     '''Rank adaptation method''' 
     Frahst_alg.rank_adjust(zt)
-
+  
     '''Store data''' 
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
-    #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn', 'x_sample']
-    #tracked_values = ['ht','e_ratio','r','recon','Q_stat', 'coeffs', 'h_res', 'h_res_aa', 'h_res_norm']
-    tracked_values = ['ht','e_ratio','r','recon']
-
+    tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
+    #tracked_values = ['ht','e_ratio','r','recon']
+  
     Frahst_alg.track_var(tracked_values)
-
+  
   ''' Plot Results '''
-  #Frahst_alg.plot_res([data, 'ht', 't_stat'])
-  Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
+  Frahst_alg.plot_res([data, 'ht', 't_stat'])
+  #Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
+  #Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
 
+  Frahst_alg.analysis(D['gt'])
