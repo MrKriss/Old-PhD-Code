@@ -36,7 +36,7 @@ class FRAHST():
   Format = 'F-xxxx.A-xxxx.R-xxxx'
   """
 
-  def __init__(self, version, p, numStreams):
+  def __init__(self, version, p, numStreams = 1):
     self.p = p
     self.p['version'] = version
 
@@ -48,7 +48,7 @@ class FRAHST():
     """ Initialise all Frahst variables """
 
     r = self.p['init_r']
-
+    
     # Q_0
     if self.p['fix_init_Q'] != 0:  # fix inital Q as identity 
       q_0 = np.eye(numStreams);
@@ -103,6 +103,67 @@ class FRAHST():
       self.st['t_stat'] = 0
     if 'eng' in self.A_version:
       self.st['increased_r'] = bool(0)
+
+  def re_init(self, numStreams):
+  
+    self.numStreams = numStreams
+    """ Initialise all Frahst variables """
+   
+    r = self.p['init_r']
+    # Q_0
+    if self.p['fix_init_Q'] != 0:  # fix inital Q as identity 
+      q_0 = np.eye(numStreams);
+      Q = q_0
+    else: # generate random orthonormal matrix N x r 
+      Q = np.eye(numStreams) # Max size of Q
+      Q_0, R_0 = npl.qr(np.random.rand(numStreams,r))   
+      Q[:,:r] = Q_0          
+    # S_0
+    small_value = self.p['small_value']
+    S = np.eye(numStreams) * small_value # Avoids Singularity    
+    # v-1
+    v = np.zeros((numStreams,1)) 
+    # U(t-1) for eigenvalue estimation
+    U = np.eye(numStreams)
+  
+    # Define st dictionary 
+    self.st  = {'Q' : Q,         # Orthogonal dominant subspace vectors
+                'S' : S,     # Energy
+                'v' : v,     # used for S update
+                'U' : U,     # Used for eigen value calculations 
+                'r' : r,     # Previous rank of Q and number of hidden variables h
+                't' : 0,     # Timestep, used for ignoreup2  
+                'sumEz' : 0.0,        # Exponetial sum of zt Energy 
+                'sumEh': 0.0,     # Exponential sum of ht energy  
+                'anomaly': bool(0)}
+  
+    if 'F-7' in self.F_version:
+      # Extra variales used for alternative eigen value tracking
+      self.st['last_Z_pos'] = True
+      self.st['U2t'] = 0.0
+      self.st['eig_val'] = np.zeros(1)
+    elif 'F-3' in self.F_version:        
+      self.st['lastChangeAt'] = 0.0
+      
+    if 'eng' in self.R_version:
+      self.st['lastChangeAt'] = 0.0
+      
+    # Preliminary setup for forcasting methods.
+    if 'for' in self.A_version: 
+      self.st['pred_zt'] = np.zeros(numStreams)
+      self.st['pred_err'] = np.zeros(numStreams)
+      self.st['pred_err_norm'] = 0
+      self.st['pred_err_ave'] = 0  
+      self.st['pred_dsn'] = 0
+    if 'rec' in self.A_version:
+      self.st['recon_err'] = np.zeros(numStreams)
+      self.st['rec_err_norm'] = 0
+      self.st['rec_dsn'] = 0
+    if 'S' in self.A_version:
+      self.st['t_stat'] = 0
+    if 'eng' in self.A_version:
+      self.st['increased_r'] = bool(0)  
+
 
   def run(self, zt):
     if 'F-7' in self.F_version:
@@ -1116,110 +1177,119 @@ class FRAHST():
         self.detection_sets.append(sets)
         self.anom_detect_tab.append(anomalies_detected_tab)
 
-  def batch_analysis(self, gt_tables, anomalies_list, epsilon = 0, accumulative = 1, keep_sets = 1):
+  def batch_analysis(self, dat_str, anomalies_list, epsilon = 0, accumulative = 1, keep_sets = 1):
       ''' Calculate all anomally detection Metrics 
       
       # epsilon: used to allow for lagged detections: if Anomaly occurs in time window
       anom_start - anom_end + eplsilon it is considered a TP
       
       # Acts accumulateive 
+      
+      data 
+      
       '''
       
       for i in xrange(len(anomalies_list)):
         
-        gt_table = gt_tables[i]
+        gt_table = dat_str
         anomalies = anomalies_list[i] 
       
-      # Detections  
-      D = np.array(anomalies_list)
-      index =  D > self.p['ignoreUp2'] 
-      D = set(list(D[index]))        
-      
-      # Total Neg 
-      pred_total_N = self.st['t'] - self.p['ignoreUp2'] - len(D)    
-      
-      # initalise metrics 
-      if 'metric' not in locals() or accumulative == 0:
-        self.metric = { 'TP' : 0.0 ,
-                   'FP' : 0.0 ,
-                   'FN' : 0.0 ,
-                   'TN' : 0.0,
-                   'precision' : 0.0 ,
-                   'recall' : 0.0 ,
-                   'F1' : 0.0, 
-                   'F2' : 0.0, 
-                   'F05' : 0.0,
-                   'FPR' : 0.0,
-                   'FDR' : 0.0,
-                   'ACC' : 0.0}
-        self.detection_sets = []
-        self.anom_detect_tab = []
-
-      # set of point anomalies detected as true
-      anom_TP = set()
-      
-      # Set of anomalous segments detected           
-      anom_segments_detected_set  = set()  
-      
-      # Table to record frequency of anomalous segment detections
-      anomalies_detected_tab  = np.zeros((len (gt_table), 2))
-      anomalies_detected_tab[:,0] = gt_table['start']
-      
-      # TRUE POSITIVES
-      # Run through ground truths 
-      idx = 0
-      for gt in gt_table:
-          count = 0
-          # Run through the list of detections    
-          for d in D :
-              if d >= gt['start']  and d <= gt['start'] + gt['len'] + epsilon:
-                  # if set does not yet contain the anomaly, add it and increment TP
-                  if not anom_segments_detected_set.issuperset(set([gt['start']])):
-                      
-                      anom_segments_detected_set.add(gt['start'])
-                      anom_TP.add(d)
-                      self.metric['TP'] += 1
-                      count += 1
-                  else: # if multiple detections in anomalous segment 
-                      count += 1 
-                      anom_TP.add(d)                    
-                      
-          anomalies_detected_tab[idx,1] = count   
-          idx += 1     
-      
-      # FALSE Pos 
-      anom_FP = D - anom_TP    
-      self.metric['FP'] += len(anom_FP)
-      # FALSE Neg     
-      anom_FN = set(gt_table['start']) - anom_segments_detected_set
-      self.metric['FN'] += len(anom_FN)
-      # True Negatives
-      self.metric['TN'] += pred_total_N - len(anom_FN)
-
-      if self.metric['FP'] == 0 and self.metric['TP'] == 0:
-        self.metric['precision'] += 0
-        self.metric['FDR'] += 0
-      else:
-        self.metric['precision'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FP'])          
-        self.metric['FDR'] = self.metric['FP'] / (self.metric['FP'] + self.metric['TP'])    
-
-      self.metric['recall'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FN'])      
-      self.metric['FPR'] = self.metric['FP'] / (self.metric['TN'] + self.metric['FP'])      
-      self.metric['ACC'] = (self.metric['TP'] + self.metric['TN']) /  \
-                      ( self.metric['TP'] + self.metric['FN'] + self.metric['TN'] + self.metric['FP'] )
-                      
-      self.metric['F1'] = self.fmeasure(1, self.metric['TP'], self.metric['FN'], self.metric['FP'])
-      self.metric['F2'] = self.fmeasure(2, self.metric['TP'], self.metric['FN'], self.metric['FP'])
-      self.metric['F05'] = self.fmeasure(0.5, self.metric['TP'], self.metric['FN'], self.metric['FP']) 
-      
-      if keep_sets == 1:
-        sets = {'TP' : anom_TP,
-                'anom_seg_detected' : anom_segments_detected_set,
-                'FN' : anom_FN,
-                'FP' : anom_FP}     
-        self.detection_sets.append(sets)
-        self.anom_detect_tab.append(anomalies_detected_tab)
+        # Detections  
+        D = np.array(anomalies_list)
+        index =  D > self.p['ignoreUp2'] 
+        D = set(list(D[index]))        
+        
+        # Total Neg 
+        pred_total_N = self.st['t'] - self.p['ignoreUp2'] - len(D)    
+        
+        # initalise metrics 
+        if 'metric' not in locals() or accumulative == 0:
+          self.metric = { 'TP' : 0.0 ,
+                     'FP' : 0.0 ,
+                     'FN' : 0.0 ,
+                     'TN' : 0.0,
+                     'precision' : 0.0 ,
+                     'recall' : 0.0 ,
+                     'F1' : 0.0, 
+                     'F2' : 0.0, 
+                     'F05' : 0.0,
+                     'FPR' : 0.0,
+                     'FDR' : 0.0,
+                     'ACC' : 0.0}
+          self.detection_sets = []
+          self.anom_detect_tab = []
   
+        # set of point anomalies detected as true
+        anom_TP = set()
+        
+        # Set of anomalous segments detected           
+        anom_segments_detected_set  = set()  
+        
+        # Table to record frequency of anomalous segment detections
+        anomalies_detected_tab  = np.zeros((len (gt_table['start']), 2))
+        anomalies_detected_tab[:,0] = gt_table['start']
+        
+        # TRUE POSITIVES
+        # Run through ground truths 
+        
+        # XXXX this section needs re doing. Currently gt in gt_table iterates through each field in 
+        # the structured array instance. 
+        
+        
+        
+        idx = 0
+        for i in xrange(len(gt_table['start'])):
+            count = 0
+            # Run through the list of detections    
+            for d in D :
+                if d >= gt['start'][i]  and d <= gt['start'][i] + gt['len'][i] + epsilon:
+                    # if set does not yet contain the anomaly, add it and increment TP
+                    if not anom_segments_detected_set.issuperset(set([gt['start'][i]])):
+                        
+                        anom_segments_detected_set.add(gt['start'][i])
+                        anom_TP.add(d)
+                        self.metric['TP'] += 1
+                        count += 1
+                    else: # if multiple detections in anomalous segment 
+                        count += 1 
+                        anom_TP.add(d)                    
+                        
+            anomalies_detected_tab[idx,1] = count   
+            idx += 1     
+        
+        # FALSE Pos 
+        anom_FP = D - anom_TP    
+        self.metric['FP'] += len(anom_FP)
+        # FALSE Neg     
+        anom_FN = set(gt_table['start']) - anom_segments_detected_set
+        self.metric['FN'] += len(anom_FN)
+        # True Negatives
+        self.metric['TN'] += pred_total_N - len(anom_FN)
+  
+        if self.metric['FP'] == 0 and self.metric['TP'] == 0:
+          self.metric['precision'] += 0
+          self.metric['FDR'] += 0
+        else:
+          self.metric['precision'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FP'])          
+          self.metric['FDR'] = self.metric['FP'] / (self.metric['FP'] + self.metric['TP'])    
+  
+        self.metric['recall'] = self.metric['TP'] / (self.metric['TP'] + self.metric['FN'])      
+        self.metric['FPR'] = self.metric['FP'] / (self.metric['TN'] + self.metric['FP'])      
+        self.metric['ACC'] = (self.metric['TP'] + self.metric['TN']) /  \
+                        ( self.metric['TP'] + self.metric['FN'] + self.metric['TN'] + self.metric['FP'] )
+                        
+        self.metric['F1'] = self.fmeasure(1, self.metric['TP'], self.metric['FN'], self.metric['FP'])
+        self.metric['F2'] = self.fmeasure(2, self.metric['TP'], self.metric['FN'], self.metric['FP'])
+        self.metric['F05'] = self.fmeasure(0.5, self.metric['TP'], self.metric['FN'], self.metric['FP']) 
+        
+        if keep_sets == 1:
+          sets = {'TP' : anom_TP,
+                  'anom_seg_detected' : anom_segments_detected_set,
+                  'FN' : anom_FN,
+                  'FP' : anom_FP}     
+          self.detection_sets.append(sets)
+          self.anom_detect_tab.append(anomalies_detected_tab)
+    
   def fmeasure(self, B, hits, misses, falses) :
       """ General formular for F measure 
       
