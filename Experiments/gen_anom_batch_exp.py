@@ -26,7 +26,7 @@ TODO : - Getting too many seg faults. Rewrite so as to store datasets in files?
   .
 """
 
-def gen_data_str(a, dat_changes, init_c, seed = 0):
+def gen_res_str2(a, dat_changes, p, alg_changes, init_c, seed = 0):
   """ Function to genrte data array structure"""
 
   # May wish to change pA
@@ -41,18 +41,55 @@ def gen_data_str(a, dat_changes, init_c, seed = 0):
   else:
     numAnom = pA_ 
 
-
-    # Work starts here  **** 
-
   # Data info Data type 
-  dt = ([('file', 'a15'),
+  dt = ([
+         ('file', 'a15'),
          ('gt',[('start', np.int_, (numAnom,)), 
                 ('loc', np.int_, (numAnom,)),
                 ('len', np.int_, (numAnom,)),
                 ('mag', np.int_, (numAnom,)),
-                ('type', 'a10', (numAnom,) )]),
-         ('params', [('seed', 'i4'), (), () ]   )
-         
+                ('type', 'a10', (numAnom,) )] ),
+         ('met', [('TP', 'i4'), 
+                  ('FP', 'i4'),
+                  ('TN', 'i4'),
+                  ('FN', 'i4'),
+                  ('precision', 'f4'),
+                  ('recall', 'f4'),
+                  ('F05', 'f4'),
+                  ('F1', 'f4'),
+                  ('F2', 'f4'),
+                  ('ACC', 'f4'),
+                  ('FDR', 'f4'),
+                  ('FPR', 'f4'),] ),
+         ('params', [('alg', [ ('alpha', 'f4') , 
+                               ('init_r', 'i2') ,
+                               ('holdOffTime', 'i2') ,
+                               ('EWMA_filter_alpha', 'f4') ,
+                               ('residual_thresh', 'f4') ,
+                               ('ht_AR_win', 'i2') ,
+                               ('AR_order', 'i1') ,
+                               ('x_thresh', 'f4') ,
+                               ('sample_N', 'i4') ,
+                               ('dependency_lag', 'i4') ,
+                               ('t_thresh', 'f4') ,
+                               ('FP_rate', 'f4') ,
+                               ('F_min', 'f4') ,
+                               ('epsilon', 'f4') ,
+                               ('e_low', 'f4') ,
+                               ('e_high', 'f4') ,
+                               ('r_upper_bound', 'i4') ,
+                               ('fix_init_Q', np.bool) ,
+                               ('small_value', 'f4') ,
+                               ('ignoreUp2', 'i2') ,
+                               ('z_win', 'i2') ]), 
+                     ('dat' [ ('N', 'i4'),
+                              ('T', 'i4'),
+                              ('periods', np.object),
+                              ('L', 'i2'),
+                              ('L2', 'i2'),
+                              ('M', 'i2'),
+                              ('pA', 'f4'),
+                              ('noise_sig', 'f4')])] )
          ])
 
   # Big Data Structure Array
