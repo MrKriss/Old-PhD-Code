@@ -20,7 +20,6 @@ from Frahst_class import FRAHST
 """
 Code Description: Runs Batch of experiments on synthetic anomalous data  
 
-
 TODO : - Getting too many seg faults. Rewrite so as to store datasets in files? 
      : - Store names/pointers to files/variables in an array  
 
@@ -42,12 +41,19 @@ def gen_data_str(a, dat_changes, init_c, seed = 0):
   else:
     numAnom = pA_ 
 
-  dt = ([('data', np.float, (a['T'], a['N'])), 
-         ('start', np.int_, (numAnom,)), 
-         ('loc', np.int_, (numAnom,)),
-         ('len', np.int_, (numAnom,)),
-         ('mag', np.int_, (numAnom,)),
-         ('type', 'a10', (numAnom,) )])
+
+    # Work starts here  **** 
+
+  # Data info Data type 
+  dt = ([('file', 'a15'),
+         ('gt',[('start', np.int_, (numAnom,)), 
+                ('loc', np.int_, (numAnom,)),
+                ('len', np.int_, (numAnom,)),
+                ('mag', np.int_, (numAnom,)),
+                ('type', 'a10', (numAnom,) )]),
+         ('params', [('seed', 'i4'), (), () ]   )
+         
+         ])
 
   # Big Data Structure Array
   D = np.zeros((init_c,len(dat_changes.values()[0])), dtype = dt)

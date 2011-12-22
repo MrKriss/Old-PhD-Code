@@ -107,6 +107,11 @@ class FRAHST():
   def re_init(self, numStreams):
   
     self.numStreams = numStreams
+    
+    # This deletes all tracked values 
+    if hasattr(self, 'res'):
+      del self.res
+    
     """ Initialise all Frahst variables """
    
     r = self.p['init_r']
@@ -127,13 +132,13 @@ class FRAHST():
     U = np.eye(numStreams)
   
     # Define st dictionary 
-    self.st  = {'Q' : Q,         # Orthogonal dominant subspace vectors
-                'S' : S,     # Energy
-                'v' : v,     # used for S update
-                'U' : U,     # Used for eigen value calculations 
-                'r' : r,     # Previous rank of Q and number of hidden variables h
-                't' : 0,     # Timestep, used for ignoreup2  
-                'sumEz' : 0.0,        # Exponetial sum of zt Energy 
+    self.st  = {'Q' : Q,          # Orthogonal dominant subspace vectors
+                'S' : S,          # Energy
+                'v' : v,          # used for S update
+                'U' : U,          # Used for eigen value calculations 
+                'r' : r,          # Previous rank of Q and number of hidden variables h
+                't' : 0,          # Timestep, used for ignoreup2  
+                'sumEz' : 0.0,    # Exponetial sum of zt Energy 
                 'sumEh': 0.0,     # Exponential sum of ht energy  
                 'anomaly': bool(0)}
   
@@ -1177,7 +1182,7 @@ class FRAHST():
         self.detection_sets.append(sets)
         self.anom_detect_tab.append(anomalies_detected_tab)
 
-  def batch_analysis(self, dat_str, anomalies_list, epsilon = 0, accumulative = 1, keep_sets = 1):
+  def batch_analysis(self, data_list, anomalies_list, epsilon = 0, accumulative = 1, keep_sets = 1):
       ''' Calculate all anomally detection Metrics 
       
       # epsilon: used to allow for lagged detections: if Anomaly occurs in time window
@@ -1187,23 +1192,26 @@ class FRAHST():
       
       data 
       
+      Need to go through And check this in detail!!!!
+      Something not right.
+      
+      tHINK I KNOW WHAT IT IS !!
+      
       '''
       
-      for i in xrange(len(anomalies_list)):
+      # For each initial condition 
+      for k in xrange(len(anomalies_list)):
         
-        gt_table = dat_str
-        anomalies = anomalies_list[i] 
+        gt_table = data_list[k]['gt']
+        anomalies = anomalies_list[k] 
       
         # Detections  
-        D = np.array(anomalies_list)
+        D = np.array(anomalies)
         index =  D > self.p['ignoreUp2'] 
         D = set(list(D[index]))        
         
-        # Total Neg 
-        pred_total_N = self.st['t'] - self.p['ignoreUp2'] - len(D)    
-        
         # initalise metrics 
-        if 'metric' not in locals() or accumulative == 0:
+        if not hasattr(self, 'metric') or accumulative == 0:
           self.metric = { 'TP' : 0.0 ,
                      'FP' : 0.0 ,
                      'FN' : 0.0 ,
@@ -1226,34 +1234,28 @@ class FRAHST():
         anom_segments_detected_set  = set()  
         
         # Table to record frequency of anomalous segment detections
-        anomalies_detected_tab  = np.zeros((len (gt_table['start']), 2))
+        anomalies_detected_tab  = np.zeros((len(gt_table['start']), 2))
         anomalies_detected_tab[:,0] = gt_table['start']
         
         # TRUE POSITIVES
-        # Run through ground truths 
-        
-        # XXXX this section needs re doing. Currently gt in gt_table iterates through each field in 
-        # the structured array instance. 
-        
-        
         
         idx = 0
         for i in xrange(len(gt_table['start'])):
             count = 0
             # Run through the list of detections    
-            for d in D :
-                if d >= gt['start'][i]  and d <= gt['start'][i] + gt['len'][i] + epsilon:
-                    # if set does not yet contain the anomaly, add it and increment TP
-                    if not anom_segments_detected_set.issuperset(set([gt['start'][i]])):
-                        
-                        anom_segments_detected_set.add(gt['start'][i])
-                        anom_TP.add(d)
-                        self.metric['TP'] += 1
-                        count += 1
-                    else: # if multiple detections in anomalous segment 
-                        count += 1 
-                        anom_TP.add(d)                    
-                        
+            for d in D:
+              if d >= gt_table['start'][i]  and d <= gt_table['start'][i] + gt_table['len'][i] + epsilon:
+                # if set does not yet contain the anomaly, add it and increment TP
+                if not anom_segments_detected_set.issuperset(set([gt_table['start'][i]])):
+                  
+                  anom_segments_detected_set.add(gt_table['start'][i])
+                  anom_TP.add(d)
+                  self.metric['TP'] += 1
+                  count += 1
+                else: # if multiple detections in anomalous segment 
+                  count += 1 
+                  anom_TP.add(d)                    
+                      
             anomalies_detected_tab[idx,1] = count   
             idx += 1     
         
@@ -1264,7 +1266,7 @@ class FRAHST():
         anom_FN = set(gt_table['start']) - anom_segments_detected_set
         self.metric['FN'] += len(anom_FN)
         # True Negatives
-        self.metric['TN'] += pred_total_N - len(anom_FN)
+        self.metric['TN'] += (self.st['t'] - self.p['ignoreUp2'] - len(anom_FN) - len(anom_FP) - len(anom_TP))
   
         if self.metric['FP'] == 0 and self.metric['TP'] == 0:
           self.metric['precision'] += 0
@@ -1355,7 +1357,7 @@ if __name__=='__main__':
   numStreams = data.shape[1]
   
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.A-recS.R-static', p, numStreams)
+  Frahst_alg = FRAHST('F-7.A-recS.R-eig', p, numStreams)
   
   '''Begin Frahst'''
   # Main iterative loop. 

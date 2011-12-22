@@ -119,9 +119,9 @@ def gen_a_peak_dip(N, T, L, M, pA, k = 5, interval = [10,121], seed = None, nois
       if npr.rand() <= p:
         anoms.append(i) 
         num_needed -= 1
-        num_left -=1
+        num_left -= 1
       else:
-        num_left -=1   
+        num_left -= 1   
     A[:,anoms] = A[:,anoms] + np.atleast_2d(s0lin).T
   else:
     anoms = npr.randint(N)
