@@ -40,7 +40,7 @@ p = {'alpha': 0.98, 'init_r' : 1,
      # Pedro Adaptive
      'e_low' : 0.95, 'e_high' : 0.98,
      # Other Shared
-     'r_upper_bound' : None,
+     'r_upper_bound' : 0,
      'fix_init_Q' : 0,
      'small_value' : 0.0001,
      'ignoreUp2' : 50,

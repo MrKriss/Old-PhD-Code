@@ -224,7 +224,7 @@ class FRAHST():
           'e_high' : 0.98,
           'e_low' : 0.95,
           'static_r' : 0,
-          'r_upper_bound' : None,
+          'r_upper_bound' : 0,
           'fix_init_Q' : 0,
           'ignoreUp2' : 0 }
     '''
@@ -322,7 +322,7 @@ class FRAHST():
     #zt = zt.reshape(zt.shape[0],1) 
 
     # Define upper bound for r if not predefined  
-    if p['r_upper_bound'] == None :
+    if p['r_upper_bound'] == 0 :
       p['r_upper_bound'] = len(zt)
 
     # Check S remains non-singular
@@ -448,7 +448,7 @@ class FRAHST():
           'F_min' : 0.9,
           'epsilon' : 0.05,
           'static_r' : 0,
-          'r_upper_bound' : None,
+          'r_upper_bound' : 0,
           'fix_init_Q' : 0,
           'ignoreUp2' : 0 }
     '''
@@ -543,7 +543,7 @@ class FRAHST():
 
     '''Data Preprocessing'''       
     # Define upper bound for r if not predefined  
-    if p['r_upper_bound'] == None :
+    if p['r_upper_bound'] == 0 :
       p['r_upper_bound'] = len(zt)
 
     # Check S remains non-singular
@@ -1329,7 +1329,7 @@ if __name__=='__main__':
         # Pedro Adaptive
         'e_low' : 0.95,
         'e_high' : 0.98,
-        'r_upper_bound' : None,
+        'r_upper_bound' : 0,
         'fix_init_Q' : 0,
         'small_value' : 0.0001,
         'ignoreUp2' : 50 }
