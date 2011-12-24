@@ -990,7 +990,7 @@ class FRAHST():
 
     self.st = st 
 
-  def track_var(self, values = ()):
+  def track_var(self, values = (), print_anom = 0):
     
     if not hasattr(self, 'res'):
       # initalise res
@@ -1004,7 +1004,8 @@ class FRAHST():
       for k in values:
         self.res[k] = np.vstack((self.res[k], self.st[k]))
       if self.st['anomaly'] == True:
-        print 'Found Anomaly at t = {0}'.format(self.st['t'])
+        if print_anom == 1:
+          print 'Found Anomaly at t = {0}'.format(self.st['t'])
         self.res['anomalies'].append(self.st['t'])
         
     # Increment time        
