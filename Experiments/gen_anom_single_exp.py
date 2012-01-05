@@ -19,7 +19,7 @@ Code Description: Main Experimental Script File
 """
 
 ''' Anomaly Choice '''
-initial_conditions = 10
+initial_conditions = 1
 
 # peak_dip, grad_persist, step
 anomaly_type = 'grad_persist'
@@ -32,13 +32,13 @@ p = {'alpha': 0.98, 'init_r' : 1,
      # EWMA Anomaly detection
      'EWMA_filter_alpha' : 0.2, 'residual_thresh' : 0.02,
      # AR Anomaly detection 
-     'ht_AR_win' : 30, 'AR_order' : 1, 'x_thresh' : 1.5, 
+     'ht_AR_win' : 20, 'AR_order' : 1, 'x_thresh' : 1.5, 
      # Statistical 
-     'sample_N' : 20, 'dependency_lag' : 20, 't_thresh' : None, 'FP_rate' : 10**-5,
+     'sample_N' : 20, 'dependency_lag' : 2, 't_thresh' : None, 'FP_rate' : 10**-5,
      # Eigen-Adaptive
      'F_min' : 0.9, 'epsilon' : 0.05,
      # Pedro Adaptive
-     'e_low' : 0.95, 'e_high' : 0.98,
+     'e_low' : 0.95, 'e_high' : 0.99,
      # Other Shared
      'r_upper_bound' : 0,
      'fix_init_Q' : 0,
@@ -56,7 +56,7 @@ a = { 'N' : 50,
       'L2' : 200, 
       'M' : 3, 
       'pA' : 0.1, 
-      'noise_sig' : 0.2 }
+      'noise_sig' : 0.0 }
 
 gen_funcs = dict(peak_dip = gen_a_peak_dip,
                  grad_persist = gen_a_grad_persist,
@@ -65,7 +65,8 @@ gen_funcs = dict(peak_dip = gen_a_peak_dip,
 anomalies_list = []
 data_list = []
 
-Frahst_alg = FRAHST('F-7.A-recS.R-static', p)
+#Frahst_alg = FRAHST('F-7.A-recS.R-static', p)
+Frahst_alg = FRAHST('F-3.A-eng.R-eng', p)
 
 for i in xrange(initial_conditions):
   
@@ -73,7 +74,7 @@ for i in xrange(initial_conditions):
   
   #data = load_ts_data('isp_routers', 'full')
   data = D['data']
-  data = zscore_win(data, 100)
+  #data = zscore_win(data, 100)
   z_iter = iter(data)
   numStreams = data.shape[1]
   
@@ -108,8 +109,8 @@ for i in xrange(initial_conditions):
     #tracked_values = ['ht','e_ratio','r','recon', 'h_res', 'h_res_aa', 'h_res_norm']
   
     #Frahst_alg.track_var(tracked_values)
-    #Frahst_alg.track_var(['ht', 't_stat'])
-    Frahst_alg.track_var()
+    Frahst_alg.track_var(['ht', 'r', 'e_ratio'])
+    #Frahst_alg.track_var()
   
   anomalies_list.append(Frahst_alg.res['anomalies'][:])
   data_list.append(D)

@@ -237,13 +237,13 @@ p = {'alpha': 0.98, 'init_r' : 1,
      # EWMA Anomaly detection
      'EWMA_filter_alpha' : 0.2, 'residual_thresh' : 0.02,
      # AR Anomaly detection 
-     'ht_AR_win' : 30, 'AR_order' : 1, 'x_thresh' : 1.5, 
+     'ht_AR_win' : 20, 'AR_order' : 1, 'x_thresh' : 1.5, 
      # Statistical 
      'sample_N' : 20, 'dependency_lag' : 2, 't_thresh' : None, 'FP_rate' : 10**-5,
      # Eigen-Adaptive
-     'F_min' : 0.9, 'epsilon' : 0.05,
+     'F_min' : 0.92, 'epsilon' : 0.05,
      # Pedro Adaptive
-     'e_low' : 0.95, 'e_high' : 0.98,
+     'e_low' : 0.95, 'e_high' : 0.99,
      # Other Shared
      'r_upper_bound' : 0,
      'fix_init_Q' : 0,
@@ -259,9 +259,9 @@ a = { 'N' : 50,
       'periods' : [15, 40, 70, 90, 120], 
       'L' : 10, 
       'L2' : 200, 
-      'M' : 3, 
+      'M' : 5, 
       'pA' : 0.1, 
-      'noise_sig' : 0.2 }
+      'noise_sig' : 0.0 }
 
 #----Varied----#
 '''Algorithms'''    
@@ -272,7 +272,7 @@ alg_versions = ['F-3.A-eng.R-eng', 'F-7.A-recS.R-eig', 'F-7.A-forS.R-eig' , 'F-7
                                 #'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng', 'F-7.A-forS.R-static' ]
 
 # Data set changes 
-dat_changes = {'noise_sig' : [0.0, 0.05, 0.1, 0.15, 0.2]} # Need min one entry for loop
+dat_changes = {'noise_sig' : [0.0, 0.025, 0.05, 0.075, 0.1]} # Need min one entry for loop
 #dat_changes = dict(noise_sig = [0.0, 0.1, 0.2, 0.3])
 
 # Algorithm Changes

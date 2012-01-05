@@ -29,7 +29,7 @@ fig.show()
 
 # Save figure as eps
 
-filename  = 'peak&shift inputs'
+filename  = 'Peak and shift inputs'
 artistList = fig.axes[0].texts + fig.texts
 #artistList = fig.axes[0].texts + fig.
 fig.savefig(filename + '.eps', bbox_inches = 'tight', 

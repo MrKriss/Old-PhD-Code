@@ -8,11 +8,11 @@ from plot_utils import plot_2x1
 #   EH
 #   EL
 
-ylims = (2,0.65,1.0)
+ylims = (2,0.91,1.0)
 
 Title = ''
 
-plot_2x1(data2plot['hidden'], data2plot['e_ratio'], 
+plot_2x1(F.res['ht'], F.res['e_ratio'], 
          ['Hidden Variables', 'Energy Ratio'], 'Time steps',Title,  ylims= ylims)
 
 fig = gcf()
@@ -30,7 +30,7 @@ fig.show()
 
 # Save figure as eps
 
-filename  = 'FRAHST peak baselin 0 - e_low70'
+filename  = 'FRAHST shift baselin 0 - new'
 artistList = fig.axes[0].texts 
 #artistList = fig.axes[0].texts + fig.texts
 

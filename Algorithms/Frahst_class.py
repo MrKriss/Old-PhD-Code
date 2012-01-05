@@ -1024,6 +1024,8 @@ class FRAHST():
       thresh = self.p['t_thresh']
     elif 'T' in self.A_version:
       thresh = self.p['x_thresh']
+    elif 'eng' in self.A_version:
+      thresh = (self.p['e_high'] - self.p['e_low']) / 2
     
     num_plots = len(var)
     
@@ -1305,10 +1307,10 @@ class FRAHST():
 if __name__=='__main__':
 
   ''' Experimental Run Parameters '''
-  p = {'alpha': 0.98,
+  p = {'alpha': 0.96,
         'init_r' : 1, 
         # Pedro Anomal Detection
-        'holdOffTime' : 0,
+        'holdOffTime' : 5,
         # EWMA Anomaly detection
         'EWMA_filter_alpha' : 0.2,
         'residual_thresh' : 0.02,
@@ -1329,7 +1331,7 @@ if __name__=='__main__':
         'epsilon' : 0.05,
         # Pedro Adaptive
         'e_low' : 0.95,
-        'e_high' : 0.98,
+        'e_high' : 0.99,
         'r_upper_bound' : 0,
         'fix_init_Q' : 0,
         'small_value' : 0.0001,
@@ -1349,16 +1351,19 @@ if __name__=='__main__':
         'pA' : 0.1, 
         'noise_sig' : 0.3 }
   
-  D = gen_a_grad_persist(**a)
+  #D = gen_a_grad_persist(**a)
   
-  #data = load_ts_data('isp_routers', 'full')
+  data = load_ts_data('isp_routers', 'full')
   data = D['data']
-  data = zscore_win(data, 100)
+  #execfile('/Users/chris/Dropbox/Work/MacSpyder/Utils/gen_simple_peakORshift_data.py')
+  data = B
+  
+  #data = zscore_win(data, 100)
   z_iter = iter(data)
   numStreams = data.shape[1]
   
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.A-recS.R-eig', p, numStreams)
+  Frahst_alg = FRAHST('F-3.A-eng.R-eng', p, numStreams)
   
   '''Begin Frahst'''
   # Main iterative loop. 
@@ -1383,14 +1388,14 @@ if __name__=='__main__':
   
     '''Store data''' 
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
-    tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
-    #tracked_values = ['ht','e_ratio','r','recon']
+    #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
+    tracked_values = ['ht','e_ratio','r','recon']
   
     Frahst_alg.track_var(tracked_values)
   
   ''' Plot Results '''
-  Frahst_alg.plot_res([data, 'ht', 't_stat'])
-  #Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
+  #Frahst_alg.plot_res([data, 'ht', 't_stat'])
+  Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
   #Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
 
-  Frahst_alg.analysis(D['gt'])
+  #Frahst_alg.analysis(D['gt'])
