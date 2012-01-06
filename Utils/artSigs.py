@@ -157,7 +157,7 @@ def sin_rand_combo(N, T, periods, seed = None, noise_scale = 0.1 ):
     # A = T x N matrix
     A = np.mat(sin_bank) * npr.rand(len(periods),N)
     # Add Gaussian noise 
-    A += npr.randn(T, N) * noise_scale
+    A += (npr.randn(T, N) * noise_scale)
         
     return np.array(A), sin_bank
 

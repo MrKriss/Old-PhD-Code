@@ -12,7 +12,7 @@ import sys
 import os 
 import time 
 
-from gen_anom_data import gen_a_peak_dip, gen_a_grad_persist, gen_a_step
+from gen_anom_data import gen_a_peak_dip, gen_a_grad_persist, gen_a_step, gen_a_periodic_shift
 from normalisationFunc import zscore, zscore_win
 from Frahst_class import FRAHST
 
@@ -228,7 +228,8 @@ initial_conditions = 10   # i - No. of generated data sets to test
 anomaly_type = 'peak_dip'
 gen_funcs = dict(peak_dip = gen_a_peak_dip,
                  grad_persist = gen_a_grad_persist,
-                 step = gen_a_step)
+                 step = gen_a_step,
+                 trend = gen_a_periodic_shift)
 
 # Default Shared Algorithm Parameters 
 p = {'alpha': 0.98, 'init_r' : 1, 
@@ -267,7 +268,7 @@ a = { 'N' : 50,
 '''Algorithms'''    
 #alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng'] 
 #alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 'F-7.A-recS.R-static']  
-alg_versions = ['F-3.A-eng.R-eng', 'F-7.A-recS.R-eig', 'F-7.A-forS.R-eig' , 'F-7.A-recS.R-static', 'F-7.A-forS.R-static']  
+alg_versions = ['F-3.A-eng.R-eng', 'F-7.A-recS.R-eng', 'F-7.A-recS.R-eig', 'F-7.A-forS.R-eig' , 'F-7.A-recS.R-static', 'F-7.A-forS.R-static']  
 #alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 
                                 #'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng', 'F-7.A-forS.R-static' ]
 
@@ -276,7 +277,8 @@ dat_changes = {'noise_sig' : [0.0, 0.025, 0.05, 0.075, 0.1]} # Need min one ent
 #dat_changes = dict(noise_sig = [0.0, 0.1, 0.2, 0.3])
 
 # Algorithm Changes
-alg_changes = {'FP_rate' : [10**-2, 10**-3, 10**-4, 10**-5, 10**-6]} # need min one entry for loop 
+#alg_changes = {'FP_rate' : [10**-2, 10**-3, 10**-4, 10**-5, 10**-6]} # need min one entry for loop 
+alg_changes = {'FP_rate' : [10**-6]} # need min one entry for loop 
 #alg_changes = dict(F_min = [0.95, 0.9, 0.85, 0.8],
                                       #alpha = [0.99, 0.98, 0.97, 0.96])
 
@@ -288,7 +290,7 @@ dat_change_count = 0
 for v in dat_changes.values(): dat_change_count += len(v)
 
 loop_count = 0
-total_loops = alg_ver_count, alg_change_count, dat_change_count
+total_loops = alg_ver_count + alg_change_count + dat_change_count
 
 # For Profiling 
 start = time.time() 
@@ -368,4 +370,8 @@ for i in xrange(E.R.shape[0]): # for each alg version
       E.R[i,j,k]['met']['FDR'] = F.metric['FDR']
       E.R[i,j,k]['met']['FPR'] = F.metric['FPR']
     
-  print 'Finished Algorithm ver %i of %i' % (i, alg_change_count)
+  print 'Finished Algorithm ver %i of %i' % (i, alg_ver_count)
+   
+fin = time.time() - start
+print 'Finished %i iterations in %f seconds' % (total_loops, fin)
+print 'Average of %f seconds per iteration' % (fin / total_loops)

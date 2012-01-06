@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import sys
 import os 
 
-from gen_anom_data import gen_a_peak_dip, gen_a_grad_persist, gen_a_step
+from gen_anom_data import gen_a_peak_dip, gen_a_grad_persist, gen_a_step, gen_a_periodic_shift
 from normalisationFunc import zscore, zscore_win
 from Frahst_class import FRAHST
 
@@ -23,6 +23,10 @@ initial_conditions = 1
 
 # peak_dip, grad_persist, step
 anomaly_type = 'grad_persist'
+gen_funcs = dict(peak_dip = gen_a_peak_dip,
+                 grad_persist = gen_a_grad_persist,
+                 step = gen_a_step,
+                 trend = gen_a_periodic_shift)
 
 ''' Experimental Run Parameters '''
 # Default Shared Algorithm Parameters 
@@ -57,10 +61,6 @@ a = { 'N' : 50,
       'M' : 3, 
       'pA' : 0.1, 
       'noise_sig' : 0.0 }
-
-gen_funcs = dict(peak_dip = gen_a_peak_dip,
-                 grad_persist = gen_a_grad_persist,
-                 step = gen_a_step)
 
 anomalies_list = []
 data_list = []

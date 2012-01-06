@@ -51,7 +51,7 @@ in which case it is set once at the start of the function.
 
 """
 
-def gen_a_peak_dip(N, T, L, M, pA, k = 5, interval = [10,121], seed = None, noise_sig = 0.1, L2 = None, periods = None):
+def gen_a_peak_dip(N, T, L, M, pA, k = 5, interval = [10,121], seed = None, noise_sig = 0.1, L2 = None, periods = None, periods2 = None):
   """ Adds short peak or dip to data 
   
   interval used is (low (Inclusive), High (exclusive)] 
@@ -139,7 +139,7 @@ def gen_a_peak_dip(N, T, L, M, pA, k = 5, interval = [10,121], seed = None, nois
 
   return output
 
-def gen_a_step(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_sig = 0.1, L2 = None, periods = None):
+def gen_a_step(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_sig = 0.1, L2 = None, periods = None, periods2 = None):
   """ Adds short sharp step change """
   
   if seed:
@@ -217,7 +217,8 @@ def gen_a_step(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_si
   return output
 
 
-def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_sig = 0.1, L2 = None, periods = None):
+
+def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_sig = 0.1, L2 = None, periods = None, periods2 = None):
   """ Adds longer persisted anomaly. gradient up/down to it 
   and vice versa after L steps """
 
@@ -295,24 +296,112 @@ def gen_a_grad_persist(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, 
     a1_type = anom_type[5:].split('--')[0]
     a2_type = anom_type[5:].split('--')[1]    
     gt_table[i+count] = (start_point, a, L, M, 'Grad ' + a1_type)
-    gt_table[i+count+1] = (start_point+L2+L/2.0, a, L, M, 'Grad ' + a2_type)
+    gt_table[i+count+1] = (start_point+L2+(L/2.0), a, L, M, 'Grad ' + a2_type)
     count += 1
 
   output = dict(data = A, gt = gt_table, trends = sins, periods = periods)
   return output
 
+
+def gen_a_periodic_shift(N, T, L, M, pA, k = 5, interval = [10,101], seed = None, noise_sig = 0.1, L2 = None, periods = None, periods2 = None):
+  """ Switches signal periods from one set of trends to another and back again
+   after L2 steps 
+   
+   Tests for a group of signals momentarily breaking correlations.
+   """
+
+  if seed:
+      print 'Setting seed to %i' % (seed) 
+      npr.seed(seed)
+  
+  if periods is None:
+    periods = []
+    num_left = float(interval[1] - interval[0])
+    num_needed = float(k)
+    for i in xrange(interval[0], interval[1]+1):
+      # probability of selection = (number needed)/(number left)
+      p = num_needed / num_left
+      if npr.rand() <= p:
+        periods.append(i) 
+        num_needed -= 1
+      else:
+        num_left -=1   
+    
+  if periods2 is None:
+      periods2 = []
+      num_left = float(interval[1] - interval[0])
+      num_needed = float(k)
+      for i in xrange(interval[0], interval[1]+1):
+        # probability of selection = (number needed)/(number left)
+        p = num_needed / num_left
+        if npr.rand() <= p:
+          periods2.append(i) 
+          num_needed -= 1
+        else:
+          num_left -=1     
+
+  # Seed already set at start of function 
+  A, sins1 = sin_rand_combo(N, T, periods, noise_scale = noise_sig)
+  B, sins2 = sin_rand_combo(N, T, periods2, noise_scale = noise_sig)
+
+  # Anomaly will occur (and finish) Between time points 50 and T - 10 
+  start_point = npr.randint(50, T - L - L2 - 10)
+
+  # Select stream(s) to be anomalous
+  if type(pA) == int:
+    num_anom = pA
+  elif pA < 1.0:
+    num_anom = np.floor(pA * N)
+
+  if num_anom > 1:
+    anoms = []
+    num_left = float(N)
+    num_needed = float(num_anom)
+    for i in xrange(N):
+      # probability of selection = (number needed)/(number left)
+      p = num_needed / num_left
+      if npr.rand() <= p:
+        anoms.append(i) 
+        num_needed -= 1
+        num_left -=1
+      else:
+        num_left -=1   
+    A[start_point:start_point+L2,anoms] = B[start_point:start_point+L2,anoms]
+  else:
+    anoms = npr.randint(N)
+    A[start_point:start_point+L2,anoms] = B[start_point:start_point+L2,anoms]
+
+
+  ''' Ground Truth Table '''
+  if anoms.__class__ == int:
+    anoms = [anoms]
+  
+  gt_table = np.zeros(num_anom*2, dtype = [('start','i4'),('loc','i4'),('len','i4'),('mag','i4'),('type','a10')])
+  count = 0
+  for i, a in enumerate(anoms):   
+    gt_table[i+count] = (start_point, a, 10, M, 'Break Trends')
+    gt_table[i+count+1] = (start_point+L2, a, 10, M, 'Make Trends')
+    count += 1
+
+  output = dict(data = A, gt = gt_table, trends = sins1, trends2 = sins2, periods = periods, periods2 = periods2)
+  return output
+
 if __name__=='__main__':
   
-  D = gen_a_peak_dip(50, 1000, 10, 5, 1, periods = [10, 38 , 88])
-  plt.plot(D['data'])
-  plt.figure()
-  D2 = gen_a_peak_dip(50, 1000, 10, 5, 0.1, periods = [10, 38 , 88])
-  plt.plot(D2['data'])
+  #D = gen_a_peak_dip(50, 1000, 10, 5, 1, periods = [10, 38 , 88])
+  #plt.plot(D['data'])
+  #plt.figure()
+  #D2 = gen_a_peak_dip(50, 1000, 10, 5, 0.1, periods = [10, 38 , 88])
+  #plt.plot(D2['data'])
+  
+  #plt.figure()
+  #D3 = gen_a_step(50, 1000, 20, 5, 0.1)
+  #plt.plot(D3['data'])
+  
+  #plt.figure()
+  #D4 = gen_a_grad_persist(50, 1000, 10, 2, 0.1, L2 = 200)
+  #plt.plot(D4['data'])
   
   plt.figure()
-  D3 = gen_a_step(50, 1000, 20, 5, 0.1)
-  plt.plot(D3['data'])
-  
-  plt.figure()
-  D4 = gen_a_grad_persist(50, 1000, 10, 2, 0.1, L2 = 200)
-  plt.plot(D4['data'])
+  D5 = gen_a_periodic_shift(50, 1000, 0, 0, 0.1, L2 = 200)
+  plt.plot(D5['data'])

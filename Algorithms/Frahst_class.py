@@ -18,7 +18,7 @@ from burg_AR import burg_AR
 
 from load_data import load_data, load_ts_data
 from artSigs import sin_rand_combo, simple_sins, simple_sins_3z
-from gen_anom_data import gen_a_grad_persist, gen_a_peak_dip, gen_a_step
+from gen_anom_data import gen_a_grad_persist, gen_a_peak_dip, gen_a_step, gen_a_periodic_shift
 
 """
 Code Description: The class that hlds all Frahst related Functions 
@@ -414,8 +414,10 @@ class FRAHST():
     st['ht'] = ht_vec
 
     # Energy Ratio Calculations    
-    st['sumEz'] = p['alpha']*st['sumEz'] + np.sum(zt ** 2) # Energy of Data
-    st['sumEh'] = p['alpha']*st['sumEh'] + np.sum(ht ** 2) # Energy of Hidden Variables
+    st['Ez'] = np.sum(zt ** 2)
+    st['Eh'] = np.sum(ht ** 2)
+    st['sumEz'] = p['alpha']*st['sumEz'] + st['Ez'] # Energy of Data
+    st['sumEh'] = p['alpha']*st['sumEh'] + st['Eh'] # Energy of Hidden Variables
 
     if st['sumEz'] == 0 : # Catch NaNs 
       st['e_ratio']  = 0.0
@@ -629,9 +631,11 @@ class FRAHST():
     ht_vec = np.hstack((ht.T[0,:], np.array([np.nan]*(self.numStreams-r))))
     st['ht'] = ht_vec
 
-    # Energy Ratio Calculations    
-    st['sumEz'] = p['alpha']*st['sumEz'] + np.sum(zt ** 2) # Energy of Data
-    st['sumEh'] = p['alpha']*st['sumEh'] + np.sum(ht ** 2) # Energy of Hidden Variables
+    # Energy Ratio Calculations 
+    st['Ez'] = np.sum(zt ** 2) # the norm squared 
+    st['Eh'] = np.sum(ht ** 2) # the norm squared 
+    st['sumEz'] = p['alpha']*st['sumEz'] + st['Ez'] # Energy of Data
+    st['sumEh'] = p['alpha']*st['sumEh'] + st['Eh'] # Energy of Hidden Variables
 
     if st['sumEz'] == 0 : # Catch NaNs 
       st['e_ratio']  = 0.0
@@ -761,9 +765,13 @@ class FRAHST():
       # added eignevalue through to newest.  
       # sorted_eigs = e_values[e_values.argsort()]
 
-      acounted_var = st['sumEh']
+
+      # Cahnged accounted var bellow to st['Eh'] NOT st['SumEh']
+      # Same with st['Ez'] NOT st['SumEz'].
+      
+      acounted_var = st['Eh']
       for idx in range(r)[::-1]:
-        if ((acounted_var - st['eig_val'][idx]) / st['sumEz']) > p['F_min'] + p['epsilon']:
+        if ((acounted_var - st['eig_val'][idx]) / st['Ez']) > p['F_min'] + p['epsilon']:
           keeper[idx] = 0
           acounted_var = acounted_var - st['eig_val'][idx]
 
@@ -790,7 +798,6 @@ class FRAHST():
         st['r'] = r  
 
     self.st = st
-
 
   def anomaly_eng(self):
     
@@ -983,7 +990,58 @@ class FRAHST():
     st['rec_dsn'] = st['rec_dsn_sample'][-1]
 
     x_sample = (st['rec_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
-    st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / p['sample_N']) 
+    st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / (p['sample_N']-1.0)) 
+
+    if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
+      st['anomaly'] = True
+
+    self.st = st 
+
+  def anomaly_recon_stat_fast(self, zt):
+    """ Working on a test statistic for ressidul of zt_reconstructed """
+
+    """ Notes on possible speedup 
+    
+    Currently Differencing and sum opperations carried out across all of 
+    the sample window each ts. 
+    
+    Should be able to impliment this iteravely. 
+    However, not really worth it after profiling
+    anomaly recon stat takes ~ 0.10 seconds our of a total of ~ 0.7.
+    
+    Talking about a 10% * 1/7 speedup at best = 1.4%
+    
+    """
+
+    st = self.st
+    p = self.p  
+
+    #st['recon'] = dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
+
+    #st['recon_err'] = zt.T - st['recon']
+    #st['recon_err_norm'] = npl.norm(st['recon_err'])
+    
+    z_res_norm_sq = st['Ez'] - st['Ez'] 
+
+    # Build/Slide recon_err_window
+    if  st.has_key('recon_err_win'):
+      st['recon_err_win'][:-1] = st['recon_err_win'][1:] # Shift Window
+      st['recon_err_win'][-1] = z_res_norm_sq
+      #st['recon_err_win'][-1] = st['recon_err_norm']
+    else:
+      st['recon_err_win'] = np.zeros(((p['sample_N'] + p['dependency_lag']), 1))
+      st['recon_err_win'][-1] = z_res_norm_sq
+      #st['recon_err_win'][-1] = st['recon_err_norm']
+
+    # Differenced squared norms of the residules. 
+    #st['rec_dsn_sample'] = st['recon_err_win'][::2] - st['recon_err_win'][1::2] 
+    #st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)[::2]
+    st['rec_dsn_sample'] = np.diff(st['recon_err_win'], axis = 0)
+    st['rec_dsn'] = st['rec_dsn_sample'][-1]
+    
+    x_sample = (st['rec_dsn_sample'][-(p['sample_N'] + p['dependency_lag']):-p['dependency_lag']]**2).sum()
+
+    st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / (p['sample_N']-1.0)) 
 
     if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
       st['anomaly'] = True
@@ -996,13 +1054,22 @@ class FRAHST():
       # initalise res
       self.res = {}
       for k in values:
-        self.res[k] = self.st[k]
+        if k == 'eig_val':
+          self.res[k] = np.hstack((self.st[k], np.array([np.nan]*(self.numStreams-self.st['r']))))
+        else:
+          self.res[k] = self.st[k]
+        
       self.res['anomalies'] = []
     
     else:
       # stack values for all keys
       for k in values:
-        self.res[k] = np.vstack((self.res[k], self.st[k]))
+        if k == 'eig_val':
+          new_line = np.hstack((self.st[k], np.array([np.nan]*(self.numStreams-self.st[k].size))))
+          self.res[k] = np.vstack((self.res[k], new_line))
+        else:
+          self.res[k] = np.vstack((self.res[k], self.st[k]))
+        
       if self.st['anomaly'] == True:
         if print_anom == 1:
           print 'Found Anomaly at t = {0}'.format(self.st['t'])
@@ -1308,7 +1375,7 @@ if __name__=='__main__':
 
   ''' Experimental Run Parameters '''
   p = {'alpha': 0.96,
-        'init_r' : 1, 
+        'init_r' : 2, 
         # Pedro Anomal Detection
         'holdOffTime' : 5,
         # EWMA Anomaly detection
@@ -1320,15 +1387,15 @@ if __name__=='__main__':
         'x_thresh' : 1.5, 
         # Statistical 
         'sample_N' : 20,
-        'dependency_lag' : 1,
+        'dependency_lag' : 2,
         't_thresh' : None,
-        'FP_rate' : 10**-4,
+        'FP_rate' : 10**-5,
         # Q statistical 
         'Q_lag' : 5,
         'Q_alpha' : 0.05,
         # Eigen-Adaptive
         'F_min' : 0.9,
-        'epsilon' : 0.05,
+        'epsilon' : 0.02,
         # Pedro Adaptive
         'e_low' : 0.95,
         'e_high' : 0.99,
@@ -1344,26 +1411,35 @@ if __name__=='__main__':
   
   a = { 'N' : 50, 
         'T' : 1000, 
-        'periods' : [15, 40, 70, 90,120], 
+        'periods' : [15,50, 70], #[15, 40, 70, 90,120], 
         'L' : 10, 
         'L2' : 200, 
         'M' : 3, 
         'pA' : 0.1, 
-        'noise_sig' : 0.3 }
+        'noise_sig' : 0.1,
+        'seed' : 2 }
   
-  #D = gen_a_grad_persist(**a)
+  anomaly_type = 'peak_dip'
   
-  data = load_ts_data('isp_routers', 'full')
+  gen_funcs = dict(peak_dip = gen_a_peak_dip,
+                   grad_persist = gen_a_grad_persist,
+                   step = gen_a_step,
+                   trend = gen_a_periodic_shift)
+  
+  D = gen_funcs[anomaly_type](**a)  
   data = D['data']
+
+  #data = load_ts_data('isp_routers', 'full')
   #execfile('/Users/chris/Dropbox/Work/MacSpyder/Utils/gen_simple_peakORshift_data.py')
-  data = B
+  #data = B
   
-  #data = zscore_win(data, 100)
+  #data = zscore_win(data, 50)
+  data = zscore(data)
   z_iter = iter(data)
   numStreams = data.shape[1]
   
   '''Initialise'''
-  Frahst_alg = FRAHST('F-3.A-eng.R-eng', p, numStreams)
+  Frahst_alg = FRAHST('F-7.A-recS.R-eig', p, numStreams)
   
   '''Begin Frahst'''
   # Main iterative loop. 
@@ -1378,7 +1454,7 @@ if __name__=='__main__':
     Frahst_alg.run(zt)
     # Calculate reconstructed data if needed
     st = Frahst_alg.st
-    Frahst_alg.st['recon'] = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
+    #Frahst_alg.st['recon'] = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
   
     '''Anomaly Detection method''' 
     Frahst_alg.detect_anom(zt)
@@ -1389,13 +1465,14 @@ if __name__=='__main__':
     '''Store data''' 
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
     #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
-    tracked_values = ['ht','e_ratio','r','recon']
+    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val']
   
     Frahst_alg.track_var(tracked_values)
+    #Frahst_alg.track_var()
   
   ''' Plot Results '''
   #Frahst_alg.plot_res([data, 'ht', 't_stat'])
   Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
-  #Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
+  Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
 
   #Frahst_alg.analysis(D['gt'])
