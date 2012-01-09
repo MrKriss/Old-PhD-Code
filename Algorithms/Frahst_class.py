@@ -81,11 +81,15 @@ class FRAHST():
       self.st['last_Z_pos'] = True
       self.st['U2t'] = 0.0
       self.st['eig_val'] = np.zeros(1)
+      
     elif 'F-3' in version.split('.')[0]:        
       self.st['lastChangeAt'] = 0.0
       
-    if 'eng' in self.R_version:
-      self.st['lastChangeAt'] = 0.0
+    if 'eng' in self.R_version or 'eig' in self.R_version or 'expht' in self.R_version:
+      self.st['lastChangeAt'] = -np.inf
+      
+    if 'expht' in self.R_version:
+      self.st['exp_ht'] = np.zeros(self.numStreams)
       
     # Preliminary setup for forcasting methods.
     # May put all initialisation checks here eventually
@@ -150,9 +154,12 @@ class FRAHST():
     elif 'F-3' in self.F_version:        
       self.st['lastChangeAt'] = 0.0
       
-    if 'eng' in self.R_version:
-      self.st['lastChangeAt'] = 0.0
-      
+    if 'eng' in self.R_version or 'eig' in self.R_version or 'expht' in self.R_version:
+          self.st['lastChangeAt'] = -np.inf
+          
+    if 'expht' in self.R_version:
+      self.st['exp_ht'] = np.zeros(self.numStreams)
+    
     # Preliminary setup for forcasting methods.
     if 'for' in self.A_version: 
       self.st['pred_zt'] = np.zeros(numStreams)
@@ -169,7 +176,6 @@ class FRAHST():
     if 'eng' in self.A_version:
       self.st['increased_r'] = bool(0)  
 
-
   def run(self, zt):
     if 'F-7' in self.F_version:
       self.FRAHST_V7_0_iter(zt)
@@ -185,6 +191,8 @@ class FRAHST():
         self.rank_adjust_eigen(zt)
       elif 'eng' in self.R_version:
         self.rank_adjust_energy(zt)
+      elif 'expht' in self.R_version:
+        self.rank_adjust_exp_ht(zt)
       else:
         print 'Did not run rank adjust: %s not recognised' % (self.R_version)
 
@@ -194,7 +202,7 @@ class FRAHST():
     elif 'forT' in self.A_version:
       self.anomaly_AR_forcast_thresh(zt)
     elif 'recS' in self.A_version:
-      self.anomaly_recon_stat(zt)
+      self.anomaly_recon_stat_fast(zt)
     elif 'ewma' in self.A_version:
       self.anomaly_EWMA()
     elif 'eng' in self.A_version:
@@ -719,7 +727,8 @@ class FRAHST():
 
     ''' Rank Adjust - needs ht, Q, zt, '''
     # Adjust Q_t, St and Ut for change in r
-    if st['e_ratio'] < p['F_min'] and st['r'] < p['r_upper_bound'] and t > p['ignoreUp2']:
+    if st['e_ratio'] < p['F_min'] and st['r'] < p['r_upper_bound']  \
+        and t > st['lastChangeAt'] + p['holdOffTime']:
 
       # Extend Q by z_bar
       # new h with updated Q 
@@ -757,6 +766,9 @@ class FRAHST():
       st['S'] = S 
       st['U'] = U 
 
+      # Update Last Change
+      st['lastChangeAt'] = t
+
     elif st['e_ratio'] > p['F_min'] and r > 1 and t > p['ignoreUp2']:
 
       keeper = np.ones(r, dtype = bool)
@@ -790,6 +802,104 @@ class FRAHST():
         newU = U[:r,:r].copy()
         newU = newU[keeper,:][:,keeper] # rows/cols eliminated                        
         st['U'][:newU.shape[0], :newU.shape[1]] = newU
+
+        r = keeper.sum()
+        if r == 0 :
+          r = 1
+
+        st['r'] = r  
+
+    self.st = st
+    
+  def rank_adjust_exp_ht(self, zt):
+    """ Adjust rank r of subspace accoring to my eigvalue-adaptive method """
+
+    st = self.st
+    p = self.p
+
+    Q = st['Q']
+    S = st['S']
+    U = st['U']
+    r = st['r']
+    t = st['t']
+
+    # Track ht individually  
+    st['exp_ht'][:st['r']] = p['alpha'] * st['exp_ht'][:st['r']] + st['ht'][:st['r']]**2
+    
+    ''' Rank Adjust - needs ht, Q, zt, '''
+    # Adjust Q_t, St and Ut for change in r
+    if st['e_ratio'] < p['F_min'] and st['r'] < p['r_upper_bound']  \
+        and t > st['lastChangeAt'] + p['holdOffTime']:
+
+      # Extend Q by z_bar
+      # new h with updated Q 
+      h_dash = dot(Q[:, :r].T,  zt)
+      # Error 
+      z_bar = zt - dot(Q[:, :r] , h_dash)
+      z_bar_norm = npl.norm(z_bar)
+      z_bar = z_bar / z_bar_norm
+      # Extend Q
+      Q[:, r] = z_bar.T[0,:]
+
+      # Set next row and column to zero
+      S[r, :] = 0.0
+      S[:, r] = 0.0
+      s_end  = z_bar_norm ** 2
+      S[r, r] = s_end # change last element
+
+      # Update Ut_1
+      # Set next row and column to zero
+      U[r, :] = 0.0
+      U[:, r] = 0.0
+      U[r, r] = 1.0 # change last element
+
+      # Update eigenvalue 
+      st['eig_val'] = np.hstack((st['eig_val'], z_bar_norm ** 2)) 
+      # This is the bit where the estimate is off? dont really have anything better 
+
+      # Flag as increased r
+      if 'eng' in self.A_version:
+        st['increased_r'] = bool(1)
+
+      # new r, increment and store
+      st['r'] = r + 1
+      st['Q'] = Q 
+      st['S'] = S 
+      st['U'] = U 
+
+      # Update Last Change
+      st['lastChangeAt'] = t
+
+    elif st['e_ratio'] > p['F_min'] and r > 1 and t > p['ignoreUp2']:
+
+      keeper = np.ones(r, dtype = bool)
+      
+      acounted_var = st['sumEh']
+      for idx in range(r)[::-1]:
+        if ((acounted_var - st['exp_ht'][idx]) / st['sumEz']) > p['F_min'] + p['epsilon']:
+          keeper[idx] = 0
+          acounted_var = acounted_var - st['exp_ht'][idx]
+
+      # use keeper as a logical selector for S and Q and U 
+      if not keeper.all():
+
+        # Delete rows/cols in Q, S, and U. 
+        newQ = Q[:,:r].copy()
+        newQ = newQ[:,keeper] # cols eliminated                        
+        st['Q'][:newQ.shape[0], :newQ.shape[1]] = newQ
+
+        newS = S[:r,:r].copy()
+        newS = newS[keeper,:][:,keeper] # rows/cols eliminated                        
+        st['S'][:newS.shape[0], :newS.shape[1]] = newS
+
+        newU = U[:r,:r].copy()
+        newU = newU[keeper,:][:,keeper] # rows/cols eliminated                        
+        st['U'][:newU.shape[0], :newU.shape[1]] = newU
+        
+        # Eliminate elements and pad zeroes on the end
+        new_exp_ht =  st['exp_ht'].copy()[keeper]
+        st['exp_ht'] = np.zeros(self.numStreams) 
+        st['exp_ht'][:keeper.sum()] = new_exp_ht
 
         r = keeper.sum()
         if r == 0 :
@@ -1021,7 +1131,7 @@ class FRAHST():
     #st['recon_err'] = zt.T - st['recon']
     #st['recon_err_norm'] = npl.norm(st['recon_err'])
     
-    z_res_norm_sq = st['Ez'] - st['Ez'] 
+    z_res_norm_sq = (st['Ez'] - st['Eh']) 
 
     # Build/Slide recon_err_window
     if  st.has_key('recon_err_win'):
@@ -1086,6 +1196,11 @@ class FRAHST():
       
     if title is None:
       title = (self.p['version'])
+      
+    # Preprocessing 
+    if 'exp_ht' in var:
+      res['exp_ht'][res['exp_ht'] == 0.0] = np.nan
+      
       
     if 'S' in self.A_version:
       thresh = self.p['t_thresh']
@@ -1362,7 +1477,7 @@ class FRAHST():
           self.detection_sets.append(sets)
           self.anom_detect_tab.append(anomalies_detected_tab)
     
-  def fmeasure(self, B, hits, misses, falses) :
+  def fmeasure(self, B, hits, misses, falses):
       """ General formular for F measure 
       
       Uses TP(hits), FN(misses) and FP(falses)
@@ -1372,10 +1487,10 @@ class FRAHST():
 
 
 if __name__=='__main__':
-
+  
   ''' Experimental Run Parameters '''
-  p = {'alpha': 0.96,
-        'init_r' : 2, 
+  p = {'alpha': 0.98,
+        'init_r' : 1, 
         # Pedro Anomal Detection
         'holdOffTime' : 5,
         # EWMA Anomaly detection
@@ -1394,7 +1509,7 @@ if __name__=='__main__':
         'Q_lag' : 5,
         'Q_alpha' : 0.05,
         # Eigen-Adaptive
-        'F_min' : 0.9,
+        'F_min' : 0.95,
         'epsilon' : 0.02,
         # Pedro Adaptive
         'e_low' : 0.95,
@@ -1402,7 +1517,7 @@ if __name__=='__main__':
         'r_upper_bound' : 0,
         'fix_init_Q' : 0,
         'small_value' : 0.0001,
-        'ignoreUp2' : 50 }
+        'ignoreUp2' : 100 }
       
   
   p['t_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
@@ -1411,13 +1526,13 @@ if __name__=='__main__':
   
   a = { 'N' : 50, 
         'T' : 1000, 
-        'periods' : [15,50, 70], #[15, 40, 70, 90,120], 
+        'periods' : [15, 50, 70, 90], #[15, 40, 70, 90,120], 
         'L' : 10, 
         'L2' : 200, 
         'M' : 3, 
         'pA' : 0.1, 
         'noise_sig' : 0.1,
-        'seed' : 2 }
+        'seed' : 5 }
   
   anomaly_type = 'peak_dip'
   
@@ -1433,18 +1548,18 @@ if __name__=='__main__':
   #execfile('/Users/chris/Dropbox/Work/MacSpyder/Utils/gen_simple_peakORshift_data.py')
   #data = B
   
-  #data = zscore_win(data, 50)
+  ''' Mean Centering '''
+  #data = zscore_win(data, 100)
   data = zscore(data)
   z_iter = iter(data)
   numStreams = data.shape[1]
   
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.A-recS.R-eig', p, numStreams)
+  Frahst_alg = FRAHST('F-7.A-recS.R-expht', p, numStreams)
   
   '''Begin Frahst'''
   # Main iterative loop. 
   for zt in z_iter:
-  
     zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
   
     if Frahst_alg.st['anomaly'] == True:
@@ -1454,7 +1569,7 @@ if __name__=='__main__':
     Frahst_alg.run(zt)
     # Calculate reconstructed data if needed
     st = Frahst_alg.st
-    #Frahst_alg.st['recon'] = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
+    Frahst_alg.st['recon'] = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
   
     '''Anomaly Detection method''' 
     Frahst_alg.detect_anom(zt)
@@ -1465,7 +1580,7 @@ if __name__=='__main__':
     '''Store data''' 
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
     #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
-    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val']
+    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'exp_ht']
   
     Frahst_alg.track_var(tracked_values)
     #Frahst_alg.track_var()
