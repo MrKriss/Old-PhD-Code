@@ -103,6 +103,7 @@ class FRAHST():
       self.st['recon_err'] = np.zeros(numStreams)
       self.st['rec_err_norm'] = 0
       self.st['rec_dsn'] = 0
+      self.st['decreased_r'] = bool(0)
     if 'S' in self.A_version:
       self.st['t_stat'] = 0
     if 'eng' in self.A_version:
@@ -171,6 +172,7 @@ class FRAHST():
       self.st['recon_err'] = np.zeros(numStreams)
       self.st['rec_err_norm'] = 0
       self.st['rec_dsn'] = 0
+      self.st['decreased_r'] = bool(0)
     if 'S' in self.A_version:
       self.st['t_stat'] = 0
     if 'eng' in self.A_version:
@@ -904,8 +906,12 @@ class FRAHST():
         r = keeper.sum()
         if r == 0 :
           r = 1
+        
+        st['r'] = r 
 
-        st['r'] = r  
+        if 'recS' in self.A_version:
+          st['decreased_r'] = bool(1)
+
 
     self.st = st
 
@@ -1153,8 +1159,10 @@ class FRAHST():
 
     st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / (p['sample_N']-1.0)) 
 
-    if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
+    if st['t'] > p['ignoreUp2'] and st['t_stat'] > p['t_thresh'] and not self.st['decreased_r']:
       st['anomaly'] = True
+    else:
+      self.st['decreased_r'] = False
 
     self.st = st 
 
@@ -1509,7 +1517,7 @@ if __name__=='__main__':
         'Q_lag' : 5,
         'Q_alpha' : 0.05,
         # Eigen-Adaptive
-        'F_min' : 0.95,
+        'F_min' : 0.90,
         'epsilon' : 0.02,
         # Pedro Adaptive
         'e_low' : 0.95,
