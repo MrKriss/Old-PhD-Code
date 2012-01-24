@@ -1500,7 +1500,7 @@ if __name__=='__main__':
   p = {'alpha': 0.98,
         'init_r' : 1, 
         # Pedro Anomal Detection
-        'holdOffTime' : 5,
+        'holdOffTime' : 0,
         # EWMA Anomaly detection
         'EWMA_filter_alpha' : 0.2,
         'residual_thresh' : 0.02,
@@ -1512,12 +1512,12 @@ if __name__=='__main__':
         'sample_N' : 20,
         'dependency_lag' : 2,
         't_thresh' : None,
-        'FP_rate' : 10**-5,
+        'FP_rate' : 10**-2,
         # Q statistical 
         'Q_lag' : 5,
         'Q_alpha' : 0.05,
         # Eigen-Adaptive
-        'F_min' : 0.90,
+        'F_min' : 0.95,
         'epsilon' : 0.02,
         # Pedro Adaptive
         'e_low' : 0.95,
@@ -1528,7 +1528,7 @@ if __name__=='__main__':
         'ignoreUp2' : 100 }
       
   
-  p['t_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
+  p['t_thresh'] = sp.stats.t.isf(1.0 * p['FP_rate'], p['sample_N'])
 
   ''' Anomalous Data Parameters '''
   
@@ -1537,10 +1537,10 @@ if __name__=='__main__':
         'periods' : [15, 50, 70, 90], #[15, 40, 70, 90,120], 
         'L' : 10, 
         'L2' : 200, 
-        'M' : 3, 
+        'M' : 5, 
         'pA' : 0.1, 
         'noise_sig' : 0.1,
-        'seed' : 5 }
+        'seed' : None}
   
   anomaly_type = 'peak_dip'
   
@@ -1557,13 +1557,13 @@ if __name__=='__main__':
   #data = B
   
   ''' Mean Centering '''
-  #data = zscore_win(data, 100)
-  data = zscore(data)
+  data = zscore_win(data, 100)
+  #cdata = zscore(data)
   z_iter = iter(data)
   numStreams = data.shape[1]
   
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.A-recS.R-expht', p, numStreams)
+  Frahst_alg = FRAHST('F-7.A-recS.R-static', p, numStreams)
   
   '''Begin Frahst'''
   # Main iterative loop. 
@@ -1588,7 +1588,8 @@ if __name__=='__main__':
     '''Store data''' 
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
     #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
-    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'exp_ht']
+    #tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'exp_ht']
+    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon']
   
     Frahst_alg.track_var(tracked_values)
     #Frahst_alg.track_var()

@@ -248,8 +248,8 @@ def GetInHMS(seconds):
     minutes = seconds // 60
     seconds -= 60*minutes
     if hours == 0:
-        return "%02d:%02d" % (minutes, seconds)
-    return "%02d:%02d:%02d" % (hours, minutes, seconds)
+        return "%02dm:%02ds" % (minutes, seconds)
+    return "%02dh:%02dm:%02ds" % (hours, minutes, seconds)
     
 def writeRes(filename, resdict, parameters, dataFilename, path = '.', mode = 'w'):
     ''' Write Dictionary + parameters to txt file in pretty format '''

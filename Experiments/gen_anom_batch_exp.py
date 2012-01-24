@@ -11,10 +11,12 @@ import numpy.lib.recfunctions as nprec
 import sys
 import os 
 import time 
+import pickle
 
 from gen_anom_data import gen_a_peak_dip, gen_a_grad_persist, gen_a_step, gen_a_periodic_shift
 from normalisationFunc import zscore, zscore_win
 from Frahst_class import FRAHST
+from utils import GetInHMS
 
 """
 Code Description: Runs Batch of experiments on synthetic anomalous data  
@@ -25,7 +27,7 @@ TODO : - Getting too many seg faults. Rewrite so as to store datasets in files?
 
 class E_str():
 
-  def __init__(self, a, dat_changes, p, alg_changes, alg_versions):
+  def __init__(self, a, dat_changes, p, alg_changes, alg_versions, path, init_c):
   #def gen_res_str(self, a, dat_changes, p, alg_changes, alg_versions):
     """ generate structured array to hold results 
     
@@ -105,12 +107,16 @@ class E_str():
         # update p
         p[alg_var] = alg_values[j]
         
+        if alg_var == 'FP_rate':
+          # update threshold 
+          p['t_thresh'] = sp.stats.t.isf(1.0 * p['FP_rate'], p['sample_N'])
+        
         for k in xrange(self.R.shape[2]): # data parameters
           # update a
           a[dat_var] = dat_values[k]
           
           key = 'F' + str(i) + str(j) + str(k)
-          self.F_dict[key] = FRAHST(alg_versions[i], p, a['N'])
+          self.F_dict[key] = FRAHST(alg_versions[i], p.copy(), a['N'])
           
           # Fill in rest of values
           self.R[i,j,k]['key'] = key
@@ -143,18 +149,40 @@ class E_str():
           self.R[i,j,k]['params']['dat']['M'] = a['M']
           self.R[i,j,k]['params']['dat']['pA'] = a['pA']
           self.R[i,j,k]['params']['dat']['noise_sig'] = a['noise_sig']
+ 
+    # Aditional Experimental variables worth storing 
+    self.alg_ver = alg_versions
+    self.alg_par = alg_changes
+    self.dat_par = dat_changes
+    self.path = path
+    self.init_c = init_c
 
-
-  def search_met(var, val):
+  def search_met(self,var, val):
     """ Searches metrics and returns values """
     
     X = self.R['met'][var]
     
   
-  def show(rec):
-    """ Pretty prints the record requested """
-
-
+  def show(self,i,j,k, vars2plot, number2show = 1):
+    """ Plots the Frahst instance vars for record requested """
+    
+    for a in xrange(number2show):
+    
+      # Load data file 
+      data_var = E.dat_par.keys()[0]
+      val = E.dat_par.values()[0][k]    
+      filename = 'D_' + data_var + '=' + str(val) + '_' + str(a) + '.npy'
+      data = np.load(self.path + '/' + filename)
+      
+      # Get Frahst instance 
+      key = 'F' + str(i) + str(j) + str(k)
+      F = E.F_dict[key]
+      
+      # plot Results for the entry  
+      var = []
+      var.append(data)
+      var.extend(vars2plot)
+      F.plot_res(var, hline = 0)
 
 '''Other functions '''
 def gen_data_str(a, dat_changes, init_c, path, seed = 0):
@@ -178,7 +206,7 @@ def gen_data_str(a, dat_changes, init_c, path, seed = 0):
     numAnom = pA_ 
 
   # Data info Data type 
-  dt = ([('file', 'a20'),
+  dt = ([('file', 'a24'),
          ('gt',[('start', np.int_, (numAnom,)), 
                 ('loc', np.int_, (numAnom,)),
                 ('len', np.int_, (numAnom,)),
@@ -201,11 +229,11 @@ def gen_data_str(a, dat_changes, init_c, path, seed = 0):
       if seed == 1:
         a['seed'] = i    
 
-      filename = 'D_' + dat_var + '=' + str(j) + '_' + str(i) + '.dat'
+      filename = 'D_' + dat_var + '=' + str(v) + '_' + str(i) + '.npy'
       # Generate the data
-      temp = gen_funcs[anomaly_type](**a) # so tidy!
+      temp = gen_funcs[anomaly_type](**a.copy()) # so tidy!
       # Write to file 
-      temp['data'].tofile(path + '/' + filename)
+      np.save(path + '/' + filename, temp['data'])
       # fill in D str
       nprec.recursive_fill_fields(temp['gt'], D[i,j]['gt'])
       D[i,j]['file'] = filename
@@ -215,7 +243,7 @@ def gen_data_str(a, dat_changes, init_c, path, seed = 0):
 '''Batch Parameters'''
 #-----Fixed-----#
 # Path Setup 
-exp_name = 'Preliminary 1'
+exp_name = 'Alg Comparison 1'
 
 results_path = '/Users/chris/Dropbox/Work/MacSpyder/Results/'
 cwd = os.getcwd()
@@ -223,7 +251,7 @@ path = os.path.join(results_path, exp_name)
 if not os.path.exists(path):
   os.mkdir(path)
 
-initial_conditions = 10   # i - No. of generated data sets to test
+initial_conditions = 20   # i - No. of generated data sets to test
 
 anomaly_type = 'peak_dip'
 gen_funcs = dict(peak_dip = gen_a_peak_dip,
@@ -242,7 +270,7 @@ p = {'alpha': 0.98, 'init_r' : 1,
      # Statistical 
      'sample_N' : 20, 'dependency_lag' : 2, 't_thresh' : None, 'FP_rate' : 10**-5,
      # Eigen-Adaptive
-     'F_min' : 0.92, 'epsilon' : 0.05,
+     'F_min' : 0.95, 'epsilon' : 0.02,
      # Pedro Adaptive
      'e_low' : 0.95, 'e_high' : 0.99,
      # Other Shared
@@ -252,12 +280,12 @@ p = {'alpha': 0.98, 'init_r' : 1,
      'ignoreUp2' : 50,
      'z_win' : 100 }
 
-p['t_thresh'] = sp.stats.t.isf(0.5 * p['FP_rate'], p['sample_N'])
+p['t_thresh'] = sp.stats.t.isf(1.0 * p['FP_rate'], p['sample_N'])
 
 # Default Shared Data Set Parameters
 a = { 'N' : 50, 
       'T' : 1000, 
-      'periods' : [15, 40, 70, 90, 120], 
+      'periods' : [15, 50, 70, 90], 
       'L' : 10, 
       'L2' : 200, 
       'M' : 5, 
@@ -267,18 +295,20 @@ a = { 'N' : 50,
 #----Varied----#
 '''Algorithms'''    
 #alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng'] 
-#alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 'F-7.A-recS.R-static']  
-alg_versions = ['F-3.A-eng.R-eng', 'F-7.A-recS.R-eng', 'F-7.A-recS.R-eig', 'F-7.A-forS.R-eig' , 'F-7.A-recS.R-static', 'F-7.A-forS.R-static']  
+#alg_versions = ['F-7.A-recS.R-eig' ]  
+#alg_versions = ['F-3.A-eng.R-eng', 'F-7.A-recS.R-eng', 'F-7.A-recS.R-eig', 'F-7.A-recS.R-expht' , 'F-7.A-recS.R-static']  
+alg_versions = ['F-7.A-recS.R-static']  
 #alg_versions = ['F-7.A-recS.R-eig', 'F-7.A-recS.R-eng', 
                                 #'F-7.A-forS.R-eig', 'F-7.A-forS.R-eng', 'F-7.A-forS.R-static' ]
 
 # Data set changes 
-dat_changes = {'noise_sig' : [0.0, 0.025, 0.05, 0.075, 0.1]} # Need min one entry for loop
+#dat_changes = {'noise_sig' : [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]} # Need min one entry for loop
+dat_changes = {'noise_sig' : [0.1]} # Need min one entry for loop
 #dat_changes = dict(noise_sig = [0.0, 0.1, 0.2, 0.3])
 
 # Algorithm Changes
-#alg_changes = {'FP_rate' : [10**-2, 10**-3, 10**-4, 10**-5, 10**-6]} # need min one entry for loop 
-alg_changes = {'FP_rate' : [10**-6]} # need min one entry for loop 
+alg_changes = {'FP_rate' : [10**-2, 10**-4, 10**-6]} # need min one entry for loop 
+#alg_changes = {'FP_rate' : [10**-6]} # need min one entry for loop 
 #alg_changes = dict(F_min = [0.95, 0.9, 0.85, 0.8],
                                       #alpha = [0.99, 0.98, 0.97, 0.96])
 
@@ -290,7 +320,7 @@ dat_change_count = 0
 for v in dat_changes.values(): dat_change_count += len(v)
 
 loop_count = 0
-total_loops = alg_ver_count + alg_change_count + dat_change_count
+total_loops = alg_ver_count * alg_change_count * dat_change_count
 
 # For Profiling 
 start = time.time() 
@@ -302,7 +332,7 @@ D = gen_data_str(a, dat_changes, initial_conditions, path)
 print 'Generated Dataset array'
 
 ''' Generate Results Structure '''
-E = E_str(a, dat_changes, p, alg_changes, alg_versions)
+E = E_str(a, dat_changes, p, alg_changes, alg_versions, path, initial_conditions)
 
 print 'Generated Results Array'
 
@@ -311,13 +341,14 @@ for i in xrange(E.R.shape[0]): # for each alg version
     for k in xrange(E.R.shape[2]): # for each data set parameter set 
 
       anomalies_list = []
+      gt_list = []
       for ic in xrange(D.shape[0]):  # for each initial condition
 
         # Fetch alg
         F = E.F_dict[E.R[i,j,k]['key']]
         # Fetch data 
-        data = np.fromfile(path + '/' + D[ic,k]['file'])
-        data = data.reshape(E.R[i,j,k]['params']['dat']['T'], E.R[i,j,k]['params']['dat']['N'])
+        data = np.load(path + '/' + D[ic,k]['file'])
+        #data = data.reshape(E.R[i,j,k]['params']['dat']['T'], E.R[i,j,k]['params']['dat']['N'])
         data = zscore_win(data, F.p['z_win'])
 
         '''Initialise'''      
@@ -351,7 +382,6 @@ for i in xrange(E.R.shape[0]): # for each alg version
         # Record Anomalies over whole batch
         anomalies_list.append(F.res['anomalies'][:])
         gt_list.append(D[ic,k])
-        
       
       # Anamlyise  FP FN TP etc. 
       F.batch_analysis(gt_list, anomalies_list, keep_sets = 0)
@@ -370,8 +400,15 @@ for i in xrange(E.R.shape[0]): # for each alg version
       E.R[i,j,k]['met']['FDR'] = F.metric['FDR']
       E.R[i,j,k]['met']['FPR'] = F.metric['FPR']
     
-  print 'Finished Algorithm ver %i of %i' % (i, alg_ver_count)
-   
+  ti = time.time() - start 
+  tim = GetInHMS(ti)
+  print 'Finished Algorithm ver %i of %i in %s' % (i+1, alg_ver_count, tim)
+
 fin = time.time() - start
-print 'Finished %i iterations in %f seconds' % (total_loops, fin)
+hms = GetInHMS(fin)
+print 'Finished a total of %i iterations in %s' % (total_loops, hms)
 print 'Average of %f seconds per iteration' % (fin / total_loops)
+
+
+with open( path + '/' + "E.p", "wb" ) as f:
+  pickle.dump(E, f)
