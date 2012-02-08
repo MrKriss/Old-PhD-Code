@@ -5,6 +5,7 @@
 # Created: 11/14/11
 
 import numpy as np
+import numpy.random as npr
 import scipy as sp
 import matplotlib.pyplot as plt
 import sys
@@ -13,7 +14,8 @@ import string
 from normalisationFunc import zscore
 from load_data import load_ts_data, load_data
 import ete2 as ete 
-import hcluster
+
+#import hcluster
 
 """
 Code Description:
@@ -252,9 +254,6 @@ def cluster(dist_mat):
       cluster_levels[0] = set.union(ts[i], ts[j])
 
   
-  
-  
-
 def int_str_map(input_var):
   
   """ Map a char to int or int to char for 'a-z' """ 
@@ -297,6 +296,50 @@ def bp_lookup(alphabet_size):
   return break_points
 
 
+
+def rand_proj(p_array, num_dim, itter = 50):
+  
+  N = len(p_array)
+  W = len(p_array[0]) - 1
+  
+  # construct collision matrix
+  col_mat = np.zeros((N, N))
+  rand_dim = np.zeros(num_dim)
+  fields = [0] * num_dim
+  
+  for i in xrange(itter):
+    # Create random projection 
+    # gen rand numbers
+    rand_i = []
+    num_left = float(W)
+    num_needed = float(num_dim)
+    for i in xrange(W):
+      # probability of selection = (number needed)/(number left)
+      p = num_needed / num_left
+      if npr.rand() <= p:
+        rand_i.append(i) 
+        num_needed -= 1
+        num_left -=1
+      else:
+        num_left -=1   
+    
+    # create list of fields 
+    for i,r in enumerate(rand_i):
+      fields[i] = 'f' + str(r) 
+    
+    # Create projection 
+    proj = p_array[fields]
+    
+    # Search for collisions
+    for i in xrange(len(proj)):
+      for j in xrange(i+1,len(proj)):
+        
+        if proj[i] == proj[j]:
+          # increment colliosns matrix
+          col_mat[i,j] +=1
+  
+  return col_mat
+  
 if __name__== '__main__':
   
   # Generate some data
@@ -320,9 +363,9 @@ if __name__== '__main__':
   
   a, d = SAX(data, alphabet_size, word_size)
   
-  T = save_tree(d.keys())
-  M = dist_mat(d.keys(), alphabet_size, compression_ratio)
-  distVec = hcluster.squareform(M)
+  #T = save_tree(d.keys())
+  #M = dist_mat(d.keys(), alphabet_size, compression_ratio)
+  #distVec = hcluster.squareform(M)
   
   #L = ['abccd', 'aaddb', 'abddb', 'abccb', 'aaabb', 'baaad']
   #T = save_tree(L)

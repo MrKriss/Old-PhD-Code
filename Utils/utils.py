@@ -267,3 +267,90 @@ def writeRes(filename, resdict, parameters, dataFilename, path = '.', mode = 'w'
         f.write('--\n')
     os.chdir(cwd) 
     
+    
+def write_3d_array2csv(filename, data):    
+    
+    # Write the array to disk
+    with file(filename, 'w') as outfile:
+        # I'm writing a header here just for the sake of readability
+        # Any line starting with "#" will be ignored by numpy.loadtxt
+        outfile.write('# Array shape: {0}\n'.format(data.shape))
+    
+        # Iterating through a ndimensional array produces slices along
+        # the last axis. This is equivalent to data[i,:,:] in this case
+        for data_slice in data:
+    
+            # The formatting string indicates that I'm writing out
+            # the values in left-justified columns 7 characters in width
+            # with 2 decimal places.  
+            np.savetxt(outfile, data_slice, fmt='%-6.2f', delimiter = ', ')
+    
+            # Writing out a break to indicate different slices...
+            outfile.write('# New slice\n')
+            
+def write2csv(E, metric, filename, header = 0):    
+     
+    data = E.R['met'][metric]
+     
+    # Write the array to disk
+    with file(filename, 'w') as outfile:
+        # I'm writing a header here just for the sake of readability
+        # Any line starting with "#" will be ignored by numpy.loadtxt
+        if header:
+            outfile.write('# Array shape: {0}\n'.format(data.shape))
+            outfile.write('# E.i: {0}\n'.format(E.i))
+            outfile.write('# E.j: {0}\n'.format(E.j))
+            outfile.write('# E.k: {0}\n'.format(E.k))
+            outfile.write('\n')
+            
+        outfile.write('Values for {0} metric\n'.format(metric))
+        outfile.write('\n')
+            
+        # Iterating through a ndimensional array produces slices along
+        # the last axis. This is equivalent to data[i,:,:] in this case
+            
+        for i, data_slice in enumerate(data):
+            
+            outfile.write('Algorithm: {0}\n'.format(E.alg_ver[i]))
+                
+            # The formatting string indicates that I'm writing out
+            # the values in left-justified columns 7 characters in width
+            # with 2 decimal places.
+            
+            np.savetxt(outfile, data_slice, fmt='%-6d', delimiter = ', ')
+            
+            # Writing out a break to indicate different slices...
+            outfile.write('\n')  
+
+def combineMetrics(filename1, filename2, outfilename):    
+    
+    file1 = open(filename1, 'rb')
+    file2 = open(filename2, 'rb')
+    
+    # Write the array to disk
+    with file(outfilename, 'w') as outfile:        
+        for line1 in file1:
+            line2 = file2.readline()
+            
+            num1 = line1.split(',')
+            num2 = line2.split(',')
+            
+            for i in range(len(num1)):
+                if num1[i].find('.') != -1:
+                    num1[i] = num1[i].split('.')[0]
+                if num2[i].find('.') != -1:
+                    num2[i] = num2[i].split('.')[0]
+            
+            if num1[0].strip().isdigit(): # Cheack if line contains numbers 
+                
+                l = []
+                
+                for i in range(len(num1)):
+                    l.append(num1[i].strip() + ' / ' + num2[i].strip())
+                
+                newline = ','.join(l)
+                outfile.write(newline + '\n')
+            else:
+                outfile.write(line1)
+        
+

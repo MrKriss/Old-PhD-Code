@@ -780,7 +780,7 @@ class FRAHST():
       # sorted_eigs = e_values[e_values.argsort()]
 
 
-      # Cahnged accounted var bellow to st['Eh'] NOT st['SumEh']
+      # Changed accounted var bellow to st['Eh'] NOT st['SumEh']
       # Same with st['Ez'] NOT st['SumEz'].
       
       acounted_var = st['Eh']
@@ -810,6 +810,9 @@ class FRAHST():
           r = 1
 
         st['r'] = r  
+        
+        if 'recS' in self.A_version:
+          st['decreased_r'] = bool(1)        
 
     self.st = st
     
@@ -911,7 +914,6 @@ class FRAHST():
 
         if 'recS' in self.A_version:
           st['decreased_r'] = bool(1)
-
 
     self.st = st
 
