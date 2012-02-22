@@ -41,6 +41,34 @@ def adjust_ticks(ax, axis, num_ticks):
         ax.yaxis.set_major_locator(MaxNLocator(num_ticks))
     
 
+def plot_1x1(data, ylab = '', xlab = 'Time Steps', main_title = '', ylims = 0 ):
+    ''' Nice format to plot one plotted time series'''
+                
+    # Plot data 
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.plot(data)
+    #plt.grid(True)
+    if ylims != 0:
+        if ylims[0] == 1 :
+            plt.ylim(ylims[1], ylims[2])            
+
+    # Shift spines and renumber ticks 
+    adjust_spines(ax1, ['left', 'bottom'])
+    
+    adjust_ticks(ax1, 'y', 6)
+
+    # Labels
+    fig.suptitle( main_title, size = 18, verticalalignment = 'top' )
+
+    ax1.text(0.5, -0.1, xlab, transform=ax1.transAxes,
+                                     ha='center', va='center', size = 16)        
+    ax1.text(-0.08, 0.5, ylab, transform=ax1.transAxes, rotation=90,
+                                     ha='right', va='center', size = 16)        
+
+    fig.show()
+
+
 def plot_2x1(data1, data2, ylab = '', xlab = '', main_title = '', ylims = 0):
     ''' Nice format to plot two subplotted time series'''
             

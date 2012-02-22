@@ -13,7 +13,7 @@ ylims = (2,0.91,1.0)
 Title = ''
 
 plot_2x1(F.res['ht'], F.res['e_ratio'], 
-         ['Hidden Variables', 'Energy Ratio'], 'Time steps',Title,  ylims= ylims)
+         ['Hidden Variables', 'Energy Ratio'], 'Time Steps',Title,  ylims= ylims)
 
 fig = gcf()
 
