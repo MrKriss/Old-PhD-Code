@@ -403,9 +403,9 @@ if __name__=='__main__':
           for zt in z_iter:
             zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
   
-            if F.st['anomaly'] == True:
-              F.st['anomaly'] = False # reset anomaly var
-  
+            if np.any(F.st['anomaly']):
+              F.st['anomaly'][:] = False # reset anomaly var
+              
             '''Frahst Version '''
             F.run(zt)
             # Calculate reconstructed data if needed

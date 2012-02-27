@@ -25,10 +25,12 @@ from SAX import SAX
 Code Description: The class that hlds all Frahst related Functions 
 
 Latest version: anomaly var in st is now a vector of bools of len numStream  
+Note: for methods that cant distinguish which stream is responsible, all are flagged. 
+All are also flagged if no one stream reaches aboth the threshold for the SRE. 
 
 """
 
-class FRAHST():
+class FRAHST(object):
   """ Class that holds all variants of FRAHST modules 
 
   version is a string specifying the combination of mudules to use 
@@ -36,8 +38,9 @@ class FRAHST():
   F = Frahst version 
   R = Rank adjustment Version
   A = Anomaly Version
+  S = Sax Version
 
-  Format = 'F-xxxx.A-xxxx.R-xxxx'
+  Format = 'F-xxxx.A-xxxx.R-xxxx.S-xxxx'
   """
 
   def __init__(self, version, p, numStreams = 1):
@@ -47,6 +50,7 @@ class FRAHST():
     self.F_version = version.split('.')[0]
     self.A_version = version.split('.')[1]
     self.R_version = version.split('.')[2]
+    self.S_version = version.split('.')[3]
     self.numStreams = numStreams
 
     """ Initialise all Frahst variables """
@@ -78,7 +82,7 @@ class FRAHST():
                 't' : 0,     # Timestep, used for ignoreup2  
                 'sumEz' : 0.0,        # Exponetial sum of zt Energy 
                 'sumEh': 0.0,     # Exponential sum of ht energy  
-                'anomaly': bool(0)}
+                'anomaly': np.array([0]*self.numStreams,dtype = bool)}
 
     if 'F-7' in version.split('.')[0]:
       # Extra variales used for alternative eigen value tracking
@@ -113,7 +117,9 @@ class FRAHST():
     if 'eng' in self.A_version:
       self.st['increased_r'] = bool(0)
       
-    self.st['SAX_trigger'] = None 
+    # vars for SAX usage
+    if 'none' not in self.S_version:
+      self.st['SAX_trigger'] = None 
 
   def re_init(self, numStreams):
   
@@ -151,7 +157,7 @@ class FRAHST():
                 't' : 0,          # Timestep, used for ignoreup2  
                 'sumEz' : 0.0,    # Exponetial sum of zt Energy 
                 'sumEh': 0.0,     # Exponential sum of ht energy  
-                'anomaly': bool(0)}
+                'anomaly': np.array([0]*self.numStreams,  dtype = bool)}
   
     if 'F-7' in self.F_version:
       # Extra variales used for alternative eigen value tracking
@@ -178,11 +184,15 @@ class FRAHST():
       self.st['recon_err'] = np.zeros(numStreams)
       self.st['rec_err_norm'] = 0
       self.st['rec_dsn'] = 0
-      self.st['decreased_r'] = bool(0)
+      self.st['decreased_r'] = False
     if 'S' in self.A_version:
       self.st['t_stat'] = 0
     if 'eng' in self.A_version:
-      self.st['increased_r'] = bool(0)  
+      self.st['increased_r'] = False
+      
+    # vars for SAX usage
+    if 'none' not in self.S_version:
+      self.st['SAX_trigger'] = None       
 
   def run(self, zt):
     if 'F-7' in self.F_version:
@@ -926,7 +936,7 @@ class FRAHST():
   def anomaly_eng(self):
     
     if self.st['increased_r'] == True:
-      self.st['anomaly'] = True
+      self.st['anomaly'][:] = True
       self.st['increased_r'] = False
   
 
@@ -952,7 +962,7 @@ class FRAHST():
     # Threshold residual for anomaly
     if residual > p['residual_thresh'] and st['t'] > p['ignoreUp2']:
       # Record time step of anomaly            
-      st['anomaly'] = bool(1)
+      st['anomaly'][:] = True
 
     st['EWMA_res'] = residual
 
@@ -1035,7 +1045,7 @@ class FRAHST():
     st['t_stat'] = st['pred_dsn'] / np.sqrt( x_sample / p['sample_N'])
 
     if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
-      st['anomaly'] = True
+      st['anomaly'][:] = True
 
     self.st = st
 
@@ -1082,7 +1092,7 @@ class FRAHST():
 
     '''Anomaly Test'''
     if st['t'] > p['ignoreUp2'] and st['pred_err_norm']**2 > p['x_thresh']:
-      st['anomaly'] = True
+      st['anomaly'][:] = True
 
     self.st = st
 
@@ -1117,7 +1127,7 @@ class FRAHST():
     st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / (p['sample_N']-1.0)) 
 
     if st['t'] > p['ignoreUp2'] and np.abs(st['t_stat']) > p['t_thresh']:
-      st['anomaly'] = True
+      st['anomaly'][:] = True
 
     self.st = st 
 
@@ -1174,6 +1184,8 @@ class FRAHST():
       error = zt[:,0] - recon
       # Anomaly is vector of bools showing which strema are responsible
       st['anomaly'] = error > 0.25 # this value may change with more statistical analysis
+      if np.any(st['anomaly']) == False:
+        st'anomaly'][:] = True   
     else:
       self.st['decreased_r'] = False
 
@@ -1679,7 +1691,7 @@ if __name__=='__main__':
     zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
   
     if np.any(Frahst_alg.st['anomaly']):
-      Frahst_alg.st['anomaly'] = False # reset anomaly var
+      Frahst_alg.st['anomaly'][:] = False # reset anomaly var
   
     '''Frahst Version '''
     Frahst_alg.run(zt)
