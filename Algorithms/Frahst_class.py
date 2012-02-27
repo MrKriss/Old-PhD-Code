@@ -812,7 +812,7 @@ class FRAHST():
         st['r'] = r  
         
         if 'recS' in self.A_version:
-          st['decreased_r'] = bool(1)        
+          st['decreased_r'] = True      
 
     self.st = st
     
@@ -913,7 +913,7 @@ class FRAHST():
         st['r'] = r 
 
         if 'recS' in self.A_version:
-          st['decreased_r'] = bool(1)
+          st['decreased_r'] = True
 
     self.st = st
 
@@ -1514,7 +1514,7 @@ if __name__=='__main__':
         'sample_N' : 20,
         'dependency_lag' : 2,
         't_thresh' : None,
-        'FP_rate' : 10**-2,
+        'FP_rate' : 10**-4,
         # Q statistical 
         'Q_lag' : 5,
         'Q_alpha' : 0.05,
@@ -1591,7 +1591,7 @@ if __name__=='__main__':
     #tracked_values = ['ht','e_ratio','r','recon', 'pred_err', 'pred_err_norm', 'pred_err_ave', 't_stat', 'pred_dsn', 'pred_zt']   
     #tracked_values = ['ht','e_ratio','r','recon','recon_err', 'recon_err_norm', 't_stat', 'rec_dsn']
     #tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'exp_ht']
-    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon']
+    tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'decreased_r', 'Ez', 'Eh']
   
     Frahst_alg.track_var(tracked_values)
     #Frahst_alg.track_var()
@@ -1600,5 +1600,7 @@ if __name__=='__main__':
   #Frahst_alg.plot_res([data, 'ht', 't_stat'])
   Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
   Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
+  Frahst_alg.plot_res([data, 'ht', 'decreased_r', 't_stat'])
+  Frahst_alg.plot_res(['e_ratio', 'Ez'], hline = 0)
 
   #Frahst_alg.analysis(D['gt'])

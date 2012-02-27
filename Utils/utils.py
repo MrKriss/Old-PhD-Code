@@ -323,6 +323,7 @@ def write2csv(E, metric, filename, header = 0):
             outfile.write('\n')  
 
 def combineMetrics(filename1, filename2, outfilename):    
+    # Function to put FP and TP in one table 
     
     file1 = open(filename1, 'rb')
     file2 = open(filename2, 'rb')
