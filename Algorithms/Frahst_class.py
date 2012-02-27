@@ -19,9 +19,13 @@ from burg_AR import burg_AR
 from load_data import load_data, load_ts_data
 from artSigs import sin_rand_combo, simple_sins, simple_sins_3z
 from gen_anom_data import gen_a_grad_persist, gen_a_peak_dip, gen_a_step, gen_a_periodic_shift
+from SAX import SAX 
 
 """
 Code Description: The class that hlds all Frahst related Functions 
+
+Latest version: anomaly var in st is now a vector of bools of len numStream  
+
 """
 
 class FRAHST():
@@ -108,6 +112,8 @@ class FRAHST():
       self.st['t_stat'] = 0
     if 'eng' in self.A_version:
       self.st['increased_r'] = bool(0)
+      
+    self.st['SAX_trigger'] = None 
 
   def re_init(self, numStreams):
   
@@ -1129,6 +1135,8 @@ class FRAHST():
     
     Talking about a 10% * 1/7 speedup at best = 1.4%
     
+    Anomaly flagg is vector of bools 
+    
     """
 
     st = self.st
@@ -1162,11 +1170,103 @@ class FRAHST():
     st['t_stat'] = st['rec_dsn'] / np.sqrt( x_sample / (p['sample_N']-1.0)) 
 
     if st['t'] > p['ignoreUp2'] and st['t_stat'] > p['t_thresh'] and not self.st['decreased_r']:
-      st['anomaly'] = True
+      recon = np.dot(st['Q'][:,:st['r']],st['ht'][:st['r']])
+      error = zt[:,0] - recon
+      # Anomaly is vector of bools showing which strema are responsible
+      st['anomaly'] = error > 0.25 # this value may change with more statistical analysis
     else:
       self.st['decreased_r'] = False
 
     self.st = st 
+
+
+
+  def SAX_simple(self, z_t):
+    """ simplest implimentation of SAX in FRAHST 
+    
+    uses sliding window over recent values - may be able to improve to itterative version later...
+    
+    Takes SAX snap shot when anomalous point is halfway down zt sample. 
+    """ 
+
+    p = self.p
+    st = self.st
+    
+    # Build/Slide ht sample window
+    if  st.has_key('ht_sample'):
+        st['ht_sample'][:-1] = st['ht_sample'][1:] # Shift Window
+        st['ht_sample'][-1] = st['ht'][0]
+    else:
+      st['ht_sample'] = np.zeros(p['zt_sample_size'])
+      st['ht_sample'][-1] = st['ht'][0]
+    
+    # Build/Slide zt sample window
+    if  st.has_key('zt_sample'):
+      st['zt_sample'][:-1,:] = st['zt_sample'][1:,:] # Shift Window
+      st['zt_sample'][-1,:] = z_t[:,0]
+    else:
+      st['zt_sample'] = np.zeros((p['zt_sample_size'], self.numStreams))
+      st['zt_sample'][-1,:] = z_t[:,0]
+
+    # If anomaly at current time step
+    if np.any(st['anomaly']):
+      if not st['SAX_trigger']: # if no previous trigger, set to mid window time step 
+        st['SAX_trigger'] = st['t'] + np.round(p['zt_sample_size']/2.)
+      
+    if st['SAX_trigger']:
+      # Once this is greater than half zt sample size, take SAX snapshot 
+      if st['t'] >= st['SAX_trigger'] :
+        # get SAX of hidden Var
+        SAX_array_ht, SAX_dic_ht, seg_means_ht = SAX(np.atleast_2d(st['ht_sample']), p['SAX_alph_size'], 
+                                                    p['word_size'], minstd = 0.1, pre_normed = False)        
+        
+        # Get SAX of data 
+        SAX_array_zt, SAX_dic_zt, seg_means_zt = SAX(st['zt_sample'], p['SAX_alph_size'], 
+                                            p['word_size'], minstd = 1.0, pre_normed = False)
+        st['SAX_trigger'] = None 
+        
+        # store for data 
+        st['zt_SAX_a' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_array_zt
+        st['zt_SAX_d' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_dic_zt
+        st['zt_seg_m' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = seg_means_zt
+        
+        # store for hidden variable
+        st['ht_SAX_a' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_array_ht
+        st['ht_SAX_d' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_dic_ht
+        st['ht_seg_m' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = seg_means_ht
+        
+        self.st = st
+
+
+  def SAX_iter(self, z_t):
+    """ Keeps recent history of PAA and SAX """
+
+    #XXXX Work abandoned. will return if there is need 
+
+    st = self.st
+    p = self.p      
+
+    # Store z_t in sample buffer 
+    # Overwrites same array 
+    if st.has_key('SAX_zt_buffer'):
+      st['SAX_zt_buffer'][:,sample_count % p['PAA_sample_size']] = z_t
+      sample_count += 1 
+    else:
+      st['SAX_zt_buffer'] = np.zeros((self.numStreams,  p['PAA_sample_size']))
+      st['SAX_zt_buffer'][:,0] = z_t
+      sample_count = 1
+    
+    # When sample buffer is full, calculate PAAs, SAX and store
+    if not sample_count % p['PAA_sample_size']:
+      
+      # Build/Slide PAA window
+      if  st.has_key('PAA_win'):
+        st['PAA_win'][:-1] = st['PAA_win'][1:] # Shift Window
+        st['PAA_win'][-1] = new_SAX
+      else:
+        st['PAA_win'] = np.zeros((self.numStreams, p['word_size']))
+        #st['PAA_win'][-1] = 
+
 
   def track_var(self, values = (), print_anom = 0):
     
@@ -1180,6 +1280,7 @@ class FRAHST():
           self.res[k] = self.st[k]
         
       self.res['anomalies'] = []
+      self.res['anomalous_streams'] = []
     
     else:
       # stack values for all keys
@@ -1190,10 +1291,11 @@ class FRAHST():
         else:
           self.res[k] = np.vstack((self.res[k], self.st[k]))
         
-      if self.st['anomaly'] == True:
+      if np.any(self.st['anomaly']):
         if print_anom == 1:
           print 'Found Anomaly at t = {0}'.format(self.st['t'])
         self.res['anomalies'].append(self.st['t'])
+        self.res['anomalous_streams'].append(self.st['anomaly'])
         
     # Increment time        
     self.st['t'] += 1    
@@ -1527,7 +1629,11 @@ if __name__=='__main__':
         'r_upper_bound' : 0,
         'fix_init_Q' : 0,
         'small_value' : 0.0001,
-        'ignoreUp2' : 100 }
+        'ignoreUp2' : 100,
+        # SAX Parameters
+        'word_size' : 20, # number of symbols in each word
+        'zt_sample_size' : 100, 
+        'SAX_alph_size' : 4 } 
       
   
   p['t_thresh'] = sp.stats.t.isf(1.0 * p['FP_rate'], p['sample_N'])
@@ -1572,7 +1678,7 @@ if __name__=='__main__':
   for zt in z_iter:
     zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
   
-    if Frahst_alg.st['anomaly'] == True:
+    if np.any(Frahst_alg.st['anomaly']):
       Frahst_alg.st['anomaly'] = False # reset anomaly var
   
     '''Frahst Version '''
@@ -1584,6 +1690,9 @@ if __name__=='__main__':
     '''Anomaly Detection method''' 
     Frahst_alg.detect_anom(zt)
   
+    #''' SAX Tracking '''
+    #Frahst_alg.SAX_simple(zt)
+  
     '''Rank adaptation method''' 
     Frahst_alg.rank_adjust(zt)
   
@@ -1593,7 +1702,7 @@ if __name__=='__main__':
     #tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'exp_ht']
     tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'decreased_r', 'Ez', 'Eh']
   
-    Frahst_alg.track_var(tracked_values)
+    Frahst_alg.track_var(tracked_values, print_anom=1)
     #Frahst_alg.track_var()
   
   ''' Plot Results '''

@@ -6,14 +6,17 @@
 
 import numpy as np
 import numpy.random as npr
-import scipy as sp
+import scipy.spatial.distance as distance
+import scipy.cluster.hierarchy as sph
 import matplotlib.pyplot as plt
 import sys
 import os 
 import string
-from normalisationFunc import zscore
+from normalisationFunc import zscore, zscore_win
 from load_data import load_ts_data, load_data
-import ete2 as ete 
+from gen_anom_data import gen_a_step_n_back
+from itertools import permutations 
+#import ete2 as ete 
 
 #import hcluster
 
@@ -22,7 +25,7 @@ Code Description:
   Implimentation of SAX.
 """
 
-def SAX(data, alphabet_size, word_size, minstd = 1):
+def SAX(data, alphabet_size, word_size, minstd = 1.0, pre_normed = False):
   """ Returns one word for each data stream 
   
   word_size == Number of segments data is split into for PAA
@@ -36,11 +39,13 @@ def SAX(data, alphabet_size, word_size, minstd = 1):
   passed = np.invert(mask)
   if np.any(mask):    
     # Scale data to have a mean of 0 and a standard deviation of 1.
-    data[:,passed] = zscore(data[:, passed])
-    symbol4skips = string.ascii_letters[np.ceil(alphabet_size/2.)]
+    if pre_normed == False:
+      data[:,passed] = zscore(data[:, passed])
+    symbol4skips = string.ascii_letters[int(np.ceil(alphabet_size/2.))]
   else:
     # Scale data to have a mean of 0 and a standard deviation of 1.
-    data = zscore(data)
+    if pre_normed == False:
+      data = zscore(data)
   
   # Calculate our breakpoint locations.
   breakpoints = bp_lookup(alphabet_size)
@@ -81,9 +86,12 @@ def SAX(data, alphabet_size, word_size, minstd = 1):
   for vals in p_dict.itervalues():
     count = len(vals)
     for i in range(count):
-      p_array[vals[i]][-1] = count
+      p_array[vals[i]][-1] = count  
   
-  return p_array, p_dict
+  return p_array, p_dict, segment_means
+
+
+
 
 def occurances(string, sub):
     count, start = 0,0
@@ -94,9 +102,8 @@ def occurances(string, sub):
         else:
             return count
 
-
 def bitmap(p_dict, level, mode = 'indervidual' ):
-  """ Make Time series bitmap for the list of phrases"""
+  """ Make 2x2 Time series bitmap for the list of phrases"""
   
   phrases = p_dict.keys()
   
@@ -138,6 +145,59 @@ def bitmap(p_dict, level, mode = 'indervidual' ):
   
   return bitmaps
 
+def bitmap2(p_dict, alphaSize, level):
+  """ Make 2x2 or 3x3 Time series bitmap for the list of phrases 
+  """
+  
+  # Define symbol alphabet 
+  alphabet = string.ascii_lowercase[:alphaSize]    
+  
+  # filter out stationary phrase
+  phrases = p_dict.keys()
+  wordLength = len(phrases[0])  
+  symbol4skips = alphabet[int(np.ceil(alphabet_size/2.))-1]
+  if symbol4skips * wordLength in phrases:
+    phrases.remove(symbol4skips * wordLength)
+
+
+  # Find all permutations of alphabet to required level depth 
+  syms = []
+
+  if level == 2:
+    for i in alphabet:
+      for j in alphabet:
+        syms.append(i+j)
+    dim = 2 ** level
+  
+  elif level == 3:
+    for i in alphabet:
+      for j in alphabet:
+        for k in alphabet:
+          syms.append(i+j+j)    
+    dim = 3 ** level
+  
+  # Storage for bitmaps 
+  dtype_string = '({0},{0})float32'.format(dim)
+  bitmaps= np.zeros(len(phrases), dtype = dtype_string)
+
+  # for each phrase
+  for i in range(len(phrases)): 
+    counts = []
+    # for each subsring 
+    for j in range(dim**2):
+      counts.append(occurances(phrases[i], syms[j]))
+    
+    # Update Bitmap 
+    bitmaps[i] = np.array(counts).reshape(dim,dim)
+    
+    # Dont think there is any reason to normalise
+    # Normalise: min-max
+    #bitmaps[i] = bitmaps[i] - bitmaps[i].min() 
+    #bitmaps[i] = bitmaps[i] / bitmaps[i].max()
+  
+  return bitmaps
+
+
 def min_dist(str1, str2, alphabet_size, compression_ratio):
   """ Return minimum distance between two SAX phrases """
   
@@ -168,7 +228,18 @@ def min_dist(str1, str2, alphabet_size, compression_ratio):
   
   return np.sqrt(compression_ratio * dist)
 
-def dist_mat(word_list, alphabet_size, compression_ratio):
+def dist_mat(p_dict, alphabet_size, compression_ratio):
+  """ Calculate distance matrix using min_dist function 
+  
+  Ignores any Stationary phrases.
+  """
+  
+  # filter out stationary phrase
+  word_list = p_dict.keys()
+  wordLength = len(word_list[0])  
+  symbol4skips = string.ascii_lowercase[int(np.ceil(alphabet_size/2.))]
+  if symbol4skips * wordLength in word_list:
+    word_list.remove(symbol4skips * wordLength)  
   
   N = len(word_list)
   dist_array = np.zeros((N,N))
@@ -178,7 +249,18 @@ def dist_mat(word_list, alphabet_size, compression_ratio):
       dist_array[i,j] = min_dist(word_list[i], word_list[j], alphabet_size, compression_ratio)
   
   return dist_array
+
+
+def bitmapDistMat(bitmapList):
   
+  N = len(bitmapList)
+  distArray = np.zeros((N,N))
+    
+  for i in range(N):
+    for j in range(N):
+      distArray[i,j] = np.sum(np.abs(bitmapList[i] - bitmapList[j]))
+    
+  return distArray  
 
 
 def save_tree(word_list, calc_distances = 0):
@@ -295,8 +377,6 @@ def bp_lookup(alphabet_size):
   
   return break_points
 
-
-
 def rand_proj(p_array, num_dim, itter = 50):
   
   N = len(p_array)
@@ -340,16 +420,49 @@ def rand_proj(p_array, num_dim, itter = 50):
   
   return col_mat
   
+  
+
+
+def plot_SAX(segMeans, alphaSize, compRatio):
+  
+  # Stored originally as wordSize x numStreams. Becaule plot func plots columsn by default 
+  numStreams = segMeans.shape[1]
+  wordSize = segMeans.shape[0]
+  bpList = bp_lookup(alphaSize)  
+  
+  PAAStreams = np.zeros((wordSize*compRatio, numStreams)) 
+  
+  for stream in xrange(numStreams):
+    temp = []
+    for mean in segMeans[:,stream]: 
+      temp.extend([mean]*int(compRatio)) 
+    
+    PAAStreams[:,stream] = np.array(temp)
+  
+  fig = plt.figure()
+  ax = fig.add_subplot(111)
+  ax.plot(PAAStreams)
+  for bp in bpList:
+    ax.axhline(y=bp, xmin=0, xmax=PAAStreams.shape[0], ls = '--')
+  
+  plt.show()  
+  
+  return PAAStreams
+
+  
 if __name__== '__main__':
   
   # Generate some data
   #data = np.array([np.sin(np.linspace(0,2*np.pi,500)), np.cos(np.linspace(0,2*np.pi, 500)), np.cos(np.linspace(0,2*np.pi, 500))])
   #data = np.array([np.sin(np.linspace(0,2*np.pi,500))], ndmin = 2)
-
   
   # Real Data 
-  data = load_ts_data('isp_routers', 'full')  
-  data = data[500:601, :]
+  #data = load_ts_data('isp_routers', 'full')  
+  #data = data[500:601, :]
+  
+  #d2 = gen_a_step_n_back(50,1000,10,5,0.1, L2 = 100)
+  #data = d2['data']
+  #data = zscore_win(data, 100)
 
   # Scale data to have a mean of 0 and a standard deviation of 1.
   #data -= np.split(np.mean(data, axis=1), data.shape[0])
@@ -357,14 +470,36 @@ if __name__== '__main__':
 
   #data = data.T
   
-  alphabet_size = 4
-  word_size = 10
-  compression_ratio = float(data.shape[0]) / float(word_size)
+  data = np.load('SAXTestData.npy')
   
-  a, d = SAX(data, alphabet_size, word_size)
+  dataSeg = data[400:600,:]  
   
+  alphabet_size = 9
+  word_size = 50
+  compression_ratio = float(dataSeg.shape[0]) / float(word_size)
+  
+  w_array, w_dic, segMeans = SAX(dataSeg, alphabet_size, word_size)
+  D = dist_mat(w_dic, alphabet_size, compression_ratio)
+  PAA = plot_SAX(segMeans, alphabet_size, compression_ratio)
+  
+  B = bitmap2(w_dic, alphabet_size, level = 2)
+  BD = bitmapDistMat(B)
+  
+  L = w_dic.keys()
+  stationaryWord = string.ascii_lowercase[int(np.ceil(alphabet_size/2.))] * word_size
+  if stationaryWord in L:
+    L.remove(stationaryWord)
+
+  # Plot Dendogram
+  # condensed distance metric 
+  BDvec = distance.squareform(BD)
+  Z = sph.linkage(BDvec, method = 'complete')
+  plt.figure()
+  # something is wrong with the dendogram mapping 
+  Dgram = sph.dendrogram(Z)
+  plt.show()
   #T = save_tree(d.keys())
-  #M = dist_mat(d.keys(), alphabet_size, compression_ratio)
+  
   #distVec = hcluster.squareform(M)
   
   #L = ['abccd', 'aaddb', 'abddb', 'abccb', 'aaabb', 'baaad']
