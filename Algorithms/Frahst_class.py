@@ -50,7 +50,10 @@ class FRAHST(object):
     self.F_version = version.split('.')[0]
     self.A_version = version.split('.')[1]
     self.R_version = version.split('.')[2]
-    self.S_version = version.split('.')[3]
+    if len(version.split('.')) > 2:
+      self.S_version = version.split('.')[3]
+    else:
+      self.S_version = 'none'
     self.numStreams = numStreams
 
     """ Initialise all Frahst variables """
@@ -1185,7 +1188,7 @@ class FRAHST(object):
       # Anomaly is vector of bools showing which strema are responsible
       st['anomaly'] = error > 0.25 # this value may change with more statistical analysis
       if np.any(st['anomaly']) == False:
-        st'anomaly'][:] = True   
+        st['anomaly'][:] = True   
     else:
       self.st['decreased_r'] = False
 
@@ -1683,7 +1686,7 @@ if __name__=='__main__':
   numStreams = data.shape[1]
   
   '''Initialise'''
-  Frahst_alg = FRAHST('F-7.A-recS.R-static', p, numStreams)
+  Frahst_alg = FRAHST('F-7.A-recS.R-static.S-none', p, numStreams)
   
   '''Begin Frahst'''
   # Main iterative loop. 
