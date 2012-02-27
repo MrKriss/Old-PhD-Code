@@ -1207,49 +1207,51 @@ class FRAHST(object):
     p = self.p
     st = self.st
     
-    # Build/Slide ht sample window
-    if  st.has_key('ht_sample'):
-        st['ht_sample'][:-1] = st['ht_sample'][1:] # Shift Window
-        st['ht_sample'][-1] = st['ht'][0]
-    else:
-      st['ht_sample'] = np.zeros(p['zt_sample_size'])
-      st['ht_sample'][-1] = st['ht'][0]
-    
-    # Build/Slide zt sample window
-    if  st.has_key('zt_sample'):
-      st['zt_sample'][:-1,:] = st['zt_sample'][1:,:] # Shift Window
-      st['zt_sample'][-1,:] = z_t[:,0]
-    else:
-      st['zt_sample'] = np.zeros((p['zt_sample_size'], self.numStreams))
-      st['zt_sample'][-1,:] = z_t[:,0]
-
-    # If anomaly at current time step
-    if np.any(st['anomaly']):
-      if not st['SAX_trigger']: # if no previous trigger, set to mid window time step 
-        st['SAX_trigger'] = st['t'] + np.round(p['zt_sample_size']/2.)
+    if 'none' not in self.S_version: 
       
-    if st['SAX_trigger']:
-      # Once this is greater than half zt sample size, take SAX snapshot 
-      if st['t'] >= st['SAX_trigger'] :
-        # get SAX of hidden Var
-        SAX_array_ht, SAX_dic_ht, seg_means_ht = SAX(np.atleast_2d(st['ht_sample']), p['SAX_alph_size'], 
-                                                    p['word_size'], minstd = 0.1, pre_normed = False)        
+      # Build/Slide ht sample window
+      if  st.has_key('ht_sample'):
+          st['ht_sample'][:-1] = st['ht_sample'][1:] # Shift Window
+          st['ht_sample'][-1] = st['ht'][0]
+      else:
+        st['ht_sample'] = np.zeros(p['zt_sample_size'])
+        st['ht_sample'][-1] = st['ht'][0]
+      
+      # Build/Slide zt sample window
+      if  st.has_key('zt_sample'):
+        st['zt_sample'][:-1,:] = st['zt_sample'][1:,:] # Shift Window
+        st['zt_sample'][-1,:] = z_t[:,0]
+      else:
+        st['zt_sample'] = np.zeros((p['zt_sample_size'], self.numStreams))
+        st['zt_sample'][-1,:] = z_t[:,0]
+  
+      # If anomaly at current time step
+      if np.any(st['anomaly']):
+        if not st['SAX_trigger']: # if no previous trigger, set to mid window time step 
+          st['SAX_trigger'] = st['t'] + np.round(p['zt_sample_size']/2.)
         
-        # Get SAX of data 
-        SAX_array_zt, SAX_dic_zt, seg_means_zt = SAX(st['zt_sample'], p['SAX_alph_size'], 
-                                            p['word_size'], minstd = 1.0, pre_normed = False)
-        st['SAX_trigger'] = None 
-        
-        # store for data 
-        st['zt_SAX_a' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_array_zt
-        st['zt_SAX_d' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_dic_zt
-        st['zt_seg_m' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = seg_means_zt
-        
-        # store for hidden variable
-        st['ht_SAX_a' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_array_ht
-        st['ht_SAX_d' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_dic_ht
-        st['ht_seg_m' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = seg_means_ht
-        
+      if st['SAX_trigger']:
+        # Once this is greater than half zt sample size, take SAX snapshot 
+        if st['t'] >= st['SAX_trigger'] :
+          # get SAX of hidden Var
+          SAX_array_ht, SAX_dic_ht, seg_means_ht = SAX(np.atleast_2d(st['ht_sample']), p['SAX_alph_size'], 
+                                                      p['word_size'], minstd = 0.1, pre_normed = False)        
+          
+          # Get SAX of data 
+          SAX_array_zt, SAX_dic_zt, seg_means_zt = SAX(st['zt_sample'], p['SAX_alph_size'], 
+                                              p['word_size'], minstd = 1.0, pre_normed = False)
+          st['SAX_trigger'] = None 
+          
+          # store for data 
+          st['zt_SAX_a' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_array_zt
+          st['zt_SAX_d' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_dic_zt
+          st['zt_seg_m' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = seg_means_zt
+          
+          # store for hidden variable
+          st['ht_SAX_a' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_array_ht
+          st['ht_SAX_d' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = SAX_dic_ht
+          st['ht_seg_m' + str(st['t'] - np.round(p['zt_sample_size']/2.))] = seg_means_ht
+          
         self.st = st
 
 
