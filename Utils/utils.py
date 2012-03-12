@@ -354,4 +354,23 @@ def combineMetrics(filename1, filename2, outfilename):
             else:
                 outfile.write(line1)
         
+def clean_zeros(data, cpy = 0):
+    """ Replaces points where data == 0 with the preceding value """
+    
+    if cpy:
+        edited_data = data.copy()
+    else:
+        edited_data = data
+        
+    
+    # run through each stream 
+    for stream in range(edited_data.shape[1]):
+        
+        # Get zeroes indexs
+        zeros_idx = edited_data[:,stream] == 0
+        for idx, val in enumerate(zeros_idx):
+            if val:
+                # Replace with previous value
+                edited_data[idx,stream] = edited_data[idx-1,stream]
 
+    return edited_data

@@ -12,7 +12,7 @@ import numpy.linalg as npl
 import matplotlib.pyplot as plt
 
 from plot_utils import plot_2x1, plot_3x1, plot_4x1
-from utils import QRsolveA, QRsolve_eigV, fmeasure, analysis
+from utils import QRsolveA, QRsolve_eigV, fmeasure, analysis, clean_zeros
 from normalisationFunc import zscore, zscore_win
 from burg_AR import burg_AR
 
@@ -1631,9 +1631,9 @@ if __name__=='__main__':
         'x_thresh' : 1.5, 
         # Statistical 
         'sample_N' : 20,
-        'dependency_lag' : 2,
+        'dependency_lag' : 5,
         't_thresh' : None,
-        'FP_rate' : 10**-4,
+        'FP_rate' : 10**-6,
         # Q statistical 
         'Q_lag' : 5,
         'Q_alpha' : 0.05,
@@ -1667,23 +1667,30 @@ if __name__=='__main__':
         'noise_sig' : 0.1,
         'seed' : None}
   
-  anomaly_type = 'peak_dip'
+  '''Choose Dataset'''
   
+  anomaly_type = 'peak_dip'  
   gen_funcs = dict(peak_dip = gen_a_peak_dip,
                    grad_persist = gen_a_grad_persist,
                    step = gen_a_step,
                    trend = gen_a_periodic_shift)
   
-  D = gen_funcs[anomaly_type](**a)  
-  data = D['data']
+  #D = gen_funcs[anomaly_type](**a)  
+  #data = D['data']
 
   #data = load_ts_data('isp_routers', 'full')
   #execfile('/Users/chris/Dropbox/Work/MacSpyder/Utils/gen_simple_peakORshift_data.py')
   #data = B
   
+  raw_data = load_data('motes_l')
+  #data = raw_data.copy()
+  data = clean_zeros(raw_data, cpy=1)
+
+  
   ''' Mean Centering '''
-  data = zscore_win(data, 100)
-  #cdata = zscore(data)
+  data = zscore_win(data, 500)
+  #data = zscore(data)
+  data = np.nan_to_num(data)
   z_iter = iter(data)
   numStreams = data.shape[1]
   
@@ -1694,7 +1701,7 @@ if __name__=='__main__':
   # Main iterative loop. 
   for zt in z_iter:
     zt = zt.reshape(zt.shape[0],1)   # Convert to a column Vector 
-  
+    
     if np.any(Frahst_alg.st['anomaly']):
       Frahst_alg.st['anomaly'][:] = False # reset anomaly var
   
@@ -1719,14 +1726,15 @@ if __name__=='__main__':
     #tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'exp_ht']
     tracked_values = ['ht','e_ratio','r', 't_stat', 'rec_dsn', 'eig_val', 'recon', 'decreased_r', 'Ez', 'Eh']
   
-    Frahst_alg.track_var(tracked_values, print_anom=1)
+    Frahst_alg.track_var(tracked_values, print_anom = 1)
     #Frahst_alg.track_var()
   
   ''' Plot Results '''
   #Frahst_alg.plot_res([data, 'ht', 't_stat'])
-  Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
+  #Frahst_alg.plot_res([data, 'ht', 'r', 'e_ratio'], hline = 0)
   Frahst_alg.plot_res([data, 'ht', 'rec_dsn', 't_stat'])
-  Frahst_alg.plot_res([data, 'ht', 'decreased_r', 't_stat'])
-  Frahst_alg.plot_res(['e_ratio', 'Ez'], hline = 0)
+  Frahst_alg.plot_res([data, 't_stat'])
+  #Frahst_alg.plot_res([data, 'ht', 'decreased_r', 't_stat'])
+  #Frahst_alg.plot_res(['e_ratio', 'Ez'], hline = 0)
 
   #Frahst_alg.analysis(D['gt'])
